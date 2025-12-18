@@ -1,0 +1,22 @@
+rt {
+  display: none !important;
+}
+
+body.pinyin-visible rt {
+  display: ruby-text !important;
+  font-size: 0.6em;
+  opacity: 0.8;
+  user-select: none;
+  transform: translateY(-2px);
+  color: inherit;
+}
+
+rt.is-sans {
+  font-family: "Microsoft YaHei", "PingFang SC", "Heiti SC", "Noto Sans SC",
+    "Helvetica Neue", sans-serif;
+}
+
+rt.is-serif {
+  font-family: "Noto Serif SC", "Songti SC", "SimSun", "PMingLiU",
+    "Times New Roman", serif;
+}

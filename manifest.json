@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Shudz - Pinyin Helper",
+  "version": "1.1",
+  "description": "Adds Pinyin above Chinese characters.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["pinyin-lib.js", "content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}
