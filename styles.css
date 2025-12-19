@@ -20,3 +20,203 @@ rt.is-serif {
   font-family: "Noto Serif SC", "Songti SC", "SimSun", "PMingLiU",
     "Times New Roman", serif;
 }
+
+body.pinyin-visible ruby.shudz-word {
+  margin-right: 0;
+}
+
+body.pinyin-visible ruby.shudz-word + ruby.shudz-word {
+  margin-left: 0.35em;
+}
+
+#shudz-tooltip {
+  position: absolute;
+  z-index: 999999; /* Fica acima de tudo */
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  padding: 12px 14px;
+  width: 320px;
+  max-width: 92vw;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #222;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+#shudz-tooltip h4 {
+  margin: 0 0 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #111;
+}
+
+#shudz-tooltip h4 span.word-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#shudz-tooltip .header-subtitle {
+  font-size: 11px;
+  color: #777;
+  margin-bottom: 6px;
+}
+
+#shudz-tooltip .close-btn {
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+  font-weight: normal;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+#shudz-tooltip .close-btn:hover {
+  color: #d32f2f;
+  background: rgba(211, 47, 47, 0.06);
+}
+
+#shudz-tooltip .shudz-content {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#shudz-tooltip ul {
+  padding-left: 18px;
+  margin: 0;
+}
+
+#shudz-tooltip li {
+  margin-bottom: 10px;
+}
+
+#shudz-tooltip .pos-tag {
+  font-weight: bold;
+  color: #4caf50;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  margin-right: 5px;
+}
+
+#shudz-tooltip .lang-tag {
+  font-size: 0.75em;
+  color: #999;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+
+#shudz-tooltip .def-text {
+  margin-top: 2px;
+}
+
+#shudz-tooltip .def-text:not(:last-child) {
+  margin-bottom: 2px;
+}
+
+#shudz-tooltip .example-list {
+  margin: 5px 0 0 0;
+  padding-left: 18px;
+  font-size: 0.9em;
+  color: #555;
+}
+
+#shudz-tooltip .example-item {
+  margin-bottom: 4px;
+}
+
+#shudz-tooltip .def-meta {
+  margin-top: 4px;
+  font-size: 0.8em;
+  color: #777;
+}
+
+#shudz-tooltip .example-list {
+  border-left: 2px solid #e0e0e0;
+  padding-left: 10px;
+}
+
+#shudz-tooltip .wiktionary-link {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.85em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+#shudz-tooltip .wiktionary-link a {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+#shudz-tooltip .wiktionary-link a:hover {
+  text-decoration: underline;
+}
+
+#shudz-tooltip .wiktionary-note {
+  color: #777;
+}
+
+#shudz-tooltip.shudz-dark {
+  background: #1e1f22;
+  color: #e6e6e6;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+
+#shudz-tooltip.shudz-dark h4 {
+  color: #ffffff;
+}
+
+#shudz-tooltip.shudz-dark .header-subtitle {
+  color: #aaaaaa;
+}
+
+#shudz-tooltip.shudz-dark .close-btn {
+  color: #bbbbbb;
+}
+
+#shudz-tooltip.shudz-dark .close-btn:hover {
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.08);
+}
+
+#shudz-tooltip.shudz-dark .pos-tag {
+  color: #81c784;
+}
+
+#shudz-tooltip.shudz-dark .lang-tag {
+  color: #9e9e9e;
+}
+
+#shudz-tooltip.shudz-dark .example-list {
+  border-left-color: #424242;
+  color: #cccccc;
+}
+
+#shudz-tooltip.shudz-dark .def-meta {
+  color: #999999;
+}
+
+#shudz-tooltip.shudz-dark .wiktionary-link {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+#shudz-tooltip.shudz-dark .wiktionary-link a {
+  color: #64b5f6;
+}
+
+#shudz-tooltip.shudz-dark .wiktionary-note {
+  color: #aaaaaa;
+}
