@@ -19,5 +19,11 @@
       "js": ["pinyin-lib.js", "content.js"],
       "css": ["styles.css"]
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["tooltip-template.html"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

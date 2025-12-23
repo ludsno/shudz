@@ -1,470 +1,661 @@
-let pinyinHasBeenAdded = false;
-const domainKey = "pinyin_state_" + window.location.hostname;
-let observer = null;
-let processingQueue = [];
-let isProcessing = false;
-chrome.storage.local.get([domainKey], (result) => {
-  const savedState = result[domainKey];
+// Configurações e constantes reutilizáveis
+const TEXT_SAMPLE_LENGTH = 1000;
+const LANGUAGE_MIN_CHARS = 10;
+const PROCESS_BATCH_SIZE = 50;
+const SELECTION_MAX_LENGTH = 20;
+const MAX_DEFINITIONS = 8;
+const MAX_EXAMPLES_PER_DEF = 2;
+const TOOLTIP_OFFSET_Y = 10;
+const TOOLTIP_MAX_WIDTH = 300;
+const TOOLTIP_SAFE_MARGIN = 310;
+const WIKTIONARY_API_BASE =
+  "https://en.wiktionary.org/api/rest_v1/page/definition/";
+const WIKTIONARY_PAGE_BASE = "https://en.wiktionary.org/wiki/";
 
-  if (savedState === true) {
-    if (document.readyState === "complete") {
-      enablePinyin();
-    } else {
-      window.addEventListener("load", enablePinyin);
-    }
-  } else if (savedState === false) {
-  } else {
-    setTimeout(() => {
-      if (detectPageLanguage()) {
-        enablePinyin();
-        chrome.storage.local.set({ [domainKey]: true });
+const shudzState = {
+  pinyinHasBeenAdded: false,
+  domainKey: "pinyin_state_" + window.location.hostname,
+  observer: null,
+  processingQueue: [],
+  isProcessing: false,
+  chineseWordSegmenter: null,
+  currentTooltip: null,
+  useSmartSegmentation: true, // novo flag global
+};
+
+const Overlay = {
+  init() {
+    chrome.storage.local.get([
+      shudzState.domainKey,
+      "useSmartSegmentation",
+    ], (result) => {
+      const savedState = result[shudzState.domainKey];
+      const savedSeg = result.useSmartSegmentation;
+      if (typeof savedSeg === "boolean") {
+        shudzState.useSmartSegmentation = savedSeg;
       }
-    }, 2000);
-  }
-});
-
-chrome.runtime.onMessage.addListener((request) => {
-  if (request.action === "togglePinyin") {
-    const isCurrentlyOn = document.body.classList.contains("pinyin-visible");
-    if (isCurrentlyOn) {
-      disablePinyin();
-      chrome.storage.local.set({ [domainKey]: false });
-    } else {
-      enablePinyin();
-      chrome.storage.local.set({ [domainKey]: true });
-    }
-  }
-});
-
-function enablePinyin() {
-  document.body.classList.add("pinyin-visible");
-
-  if (!pinyinHasBeenAdded) {
-    queueNodesForProcessing(document.body);
-    pinyinHasBeenAdded = true;
-  }
-
-  startObserver();
-  document.addEventListener("mouseup", handleTextSelection);
-}
-
-function disablePinyin() {
-  document.body.classList.remove("pinyin-visible");
-  if (observer) {
-    observer.disconnect();
-    observer = null;
-  }
-  processingQueue = [];
-  document.removeEventListener("mouseup", handleTextSelection);
-  removeTooltip();
-}
-
-function queueNodesForProcessing(rootNode) {
-  if (!rootNode) return;
-
-  const walker = document.createTreeWalker(
-    rootNode,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
-  );
-
-  let node;
-  while ((node = walker.nextNode())) {
-    const parent = node.parentElement;
-    if (!parent) continue;
-    const tag = parent.tagName;
-    if (
-      containsChinese(node.nodeValue) &&
-      tag !== "SCRIPT" &&
-      tag !== "STYLE" &&
-      tag !== "TEXTAREA" &&
-      tag !== "INPUT" &&
-      tag !== "RUBY" &&
-      tag !== "RT" &&
-      !parent.isContentEditable
-    ) {
-      processingQueue.push(node);
-    }
-  }
-  if (!isProcessing) {
-    processQueueBatch();
-  }
-}
-
-function processQueueBatch() {
-  if (processingQueue.length === 0) {
-    isProcessing = false;
-    return;
-  }
-
-  isProcessing = true;
-
-  const batchSize = 50;
-  const batch = processingQueue.splice(0, batchSize);
-
-  batch.forEach((textNode) => {
-    if (!textNode.parentNode) return;
-
-    let fontClass = "is-sans";
-    try {
-      const parentStyle = window.getComputedStyle(textNode.parentNode);
-      const fontFamily = parentStyle.fontFamily.toLowerCase();
-      if (isFontSerif(fontFamily)) {
-        fontClass = "is-serif";
-      }
-    } catch (e) {}
-
-    const fragment = document.createDocumentFragment();
-    const text = textNode.nodeValue;
-
-    const segmenter = getChineseWordSegmenter();
-
-    if (segmenter) {
-      const segments = segmenter.segment(text);
-      for (const { segment, isWordLike } of segments) {
-        if (isWordLike && containsChinese(segment)) {
-          const ruby = document.createElement("ruby");
-          ruby.textContent = segment;
-
-          ruby.classList.add("shudz-word");
-
-          const rt = document.createElement("rt");
-          rt.textContent = convertToPinyin(segment);
-          rt.className = fontClass;
-
-          ruby.appendChild(rt);
-          fragment.appendChild(ruby);
+      if (savedState === true) {
+        if (document.readyState === "complete") {
+          Overlay.enable();
         } else {
-          fragment.appendChild(document.createTextNode(segment));
+          window.addEventListener("load", Overlay.enable);
         }
-      }
-    } else {
-      for (const char of text) {
-        if (containsChinese(char)) {
-          const ruby = document.createElement("ruby");
-          ruby.textContent = char;
-
-          const rt = document.createElement("rt");
-          rt.textContent = convertToPinyin(char);
-          rt.className = fontClass;
-
-          ruby.appendChild(rt);
-          fragment.appendChild(ruby);
-        } else {
-          fragment.appendChild(document.createTextNode(char));
-        }
-      }
-    }
-
-    if (textNode.parentNode) {
-      textNode.parentNode.replaceChild(fragment, textNode);
-    }
-  });
-
-  if (window.requestIdleCallback) {
-    requestIdleCallback(() => processQueueBatch());
-  } else {
-    setTimeout(processQueueBatch, 10);
-  }
-}
-function isFontSerif(fontString) {
-  if (!fontString) return false;
-
-  const lower = fontString.toLowerCase();
-
-  const hasSansGeneric = lower.includes("sans-serif");
-  const hasSerifGeneric = lower.includes("serif");
-  const families = lower
-    .split(",")
-    .map((f) => f.trim().replace(/^['"]|['"]$/g, ""))
-    .filter(Boolean);
-
-  const firstFamily = families[0] || "";
-
-  const serifFamilies = [
-    "noto serif sc",
-    "noto serif",
-    "songti sc",
-    "simsun",
-    "pmingliu",
-    "times new roman",
-    "times",
-    "georgia",
-    "garamond",
-    "palatino",
-    "mincho",
-  ];
-
-  if (serifFamilies.some((name) => firstFamily.includes(name))) {
-    return true;
-  }
-  if (hasSerifGeneric && !hasSansGeneric) {
-    return true;
-  }
-  return false;
-}
-
-function startObserver() {
-  if (observer) return;
-
-  observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      mutation.addedNodes.forEach((node) => {
-        if (node.nodeType === 1) {
-          if (node.tagName === "RUBY" || node.tagName === "RT") return;
-          queueNodesForProcessing(node);
-        } else if (node.nodeType === 3) {
-          if (containsChinese(node.nodeValue)) {
-            if (node.parentNode) queueNodesForProcessing(node.parentNode);
+      } else if (savedState === false) {
+        // explicitamente desligado: não faz nada
+      } else {
+        // estado indefinido: tenta autodetectar página em chinês
+        setTimeout(() => {
+          if (Overlay.detectPageLanguage()) {
+            Overlay.enable();
+            chrome.storage.local.set({ [shudzState.domainKey]: true });
           }
-        }
-      });
+        }, 2000);
+      }
     });
-  });
 
-  observer.observe(document.body, { childList: true, subtree: true });
-}
+    chrome.runtime.onMessage.addListener((request) => {
+      if (request.action === "togglePinyin" || request.type === "togglePinyin") {
+        const isCurrentlyOn =
+          document.body.classList.contains("pinyin-visible");
+        if (isCurrentlyOn) {
+          Overlay.disable();
+          chrome.storage.local.set({ [shudzState.domainKey]: false });
+        } else {
+          Overlay.enable();
+          chrome.storage.local.set({ [shudzState.domainKey]: true });
+        }
+      } else if (request.type === "setSegmentation") {
+        const newValue = !!request.value;
+        if (shudzState.useSmartSegmentation === newValue) {
+          return;
+        }
+        shudzState.useSmartSegmentation = newValue;
+        Overlay.updateSegmentationCssClass();
+        if (document.body.classList.contains("pinyin-visible")) {
+          Overlay.reapplyPinyinWithCurrentSegmentation();
+        }
+      }
+    });
+  },
 
-function containsChinese(text) {
-  if (!text) return false;
-  return /[\u4e00-\u9fff]/.test(text);
-}
+  enable() {
+    document.body.classList.add("pinyin-visible");
+    Overlay.updateSegmentationCssClass();
 
-function convertToPinyin(text) {
-  try {
-    if (typeof pinyinPro === "undefined") return "";
-    const raw = pinyinPro.pinyin(text, { toneType: "mark" });
-    if (!raw) return "";
-    if (text && text.length > 1) {
-      return String(raw).replace(/\s+/g, "");
+    if (!shudzState.pinyinHasBeenAdded) {
+      Overlay.queueNodesForProcessing(document.body);
+      shudzState.pinyinHasBeenAdded = true;
     }
-    return raw;
-  } catch (e) {
-    return "";
-  }
-}
-let chineseWordSegmenter = null;
 
-function getChineseWordSegmenter() {
-  try {
-    if (!window.Intl || !Intl.Segmenter) return null;
-    if (!chineseWordSegmenter) {
-      chineseWordSegmenter = new Intl.Segmenter("zh", {
-        granularity: "word",
-      });
+    Overlay.startObserver();
+    document.addEventListener("mouseup", Overlay.handleTextSelection);
+  },
+
+  disable() {
+    document.body.classList.remove("pinyin-visible");
+    document.body.classList.remove("shudz-word-mode", "shudz-char-mode");
+    if (shudzState.observer) {
+      shudzState.observer.disconnect();
+      shudzState.observer = null;
     }
-    return chineseWordSegmenter;
-  } catch (e) {
-    return null;
-  }
-}
+    shudzState.processingQueue = [];
+    shudzState.isProcessing = false;
+    document.removeEventListener("mouseup", Overlay.handleTextSelection);
+    Tooltip.remove();
+  },
 
-function detectingPageLanguage() {
-  const text = document.body.innerText.slice(0, 1000);
-  return (text.match(/[\u4e00-\u9fa5]/g) || []).length > 10;
-}
-function detectPageLanguage() {
-  return detectingPageLanguage();
-}
+  /**
+   * Enfileira os nós de texto contendo caracteres chineses para processamento.
+   * @param {Node} rootNode - O nó raiz para iniciar a busca.
+   */
+  queueNodesForProcessing(rootNode) {
+    if (!rootNode) return;
 
-let currentTooltip = null;
-
-function handleTextSelection(event) {
-  setTimeout(() => {
-    const selection = window.getSelection();
-    const rawText = selection.toString().trim();
-    const text = normalizeChineseSelection(rawText);
-    if (text && containsChinese(text) && text.length <= 20) {
-      fetchDefinition(text, selection.getRangeAt(0));
-    } else {
-    }
-  }, 10);
-}
-function normalizeChineseSelection(text) {
-  if (!text) return "";
-
-  const matches = text.match(/[\u4e00-\u9fff]+/g);
-  if (!matches) return text;
-  return matches.join("");
-}
-
-async function fetchDefinition(word, range) {
-  showTooltip(word, "Loading definition...", range);
-
-  try {
-    const response = await fetch(
-      `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(
-        word
-      )}`
+    const walker = document.createTreeWalker(
+      rootNode,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
     );
-    if (response.status === 404) {
-      const messageHtml = `<div class="def-text">The public Wiktionary API does not have a definition entry for this exact term.</div>`;
-      const linkHtml = buildWiktionaryLink(
-        word,
-        "The entry may still exist on the main site; click to open the full page on Wiktionary."
-      );
-      showTooltip(word, messageHtml + linkHtml, range);
+
+    let node;
+    while ((node = walker.nextNode())) {
+      const parent = node.parentElement;
+      if (!parent) continue;
+      const tag = parent.tagName;
+      if (
+        Overlay.containsChinese(node.nodeValue) &&
+        tag !== "SCRIPT" &&
+        tag !== "STYLE" &&
+        tag !== "TEXTAREA" &&
+        tag !== "INPUT" &&
+        tag !== "RUBY" &&
+        tag !== "RT" &&
+        !parent.isContentEditable
+      ) {
+        shudzState.processingQueue.push(node);
+      }
+    }
+    if (!shudzState.isProcessing) {
+      Overlay.processQueueBatch();
+    }
+  },
+
+  /**
+   * Processa o lote de nós de texto enfileirados, convertendo caracteres chineses em pinyin.
+   */
+  processQueueBatch() {
+    if (shudzState.processingQueue.length === 0) {
+      shudzState.isProcessing = false;
       return;
     }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    shudzState.isProcessing = true;
 
-    const data = await response.json();
+    const batch = shudzState.processingQueue.splice(0, PROCESS_BATCH_SIZE);
 
-    const chineseDefinitions = extractChineseDefinitions(data);
+    batch.forEach((textNode) => {
+      if (!textNode.parentNode) return;
 
-    if (chineseDefinitions && chineseDefinitions.length > 0) {
-      const defsHtml = formatWiktionaryData(chineseDefinitions);
-      const linkHtml = buildWiktionaryLink(
-        word,
-        "This definition was retrieved from the public Wiktionary API. Click to see the full entry."
-      );
-      showTooltip(word, defsHtml + linkHtml, range);
-    } else {
-      console.log("No Chinese definitions in Wiktionary response:", data);
-      const messageHtml = `<div class="def-text">No Chinese definition is exposed by the public Wiktionary API for this term.</div>`;
-      const linkHtml = buildWiktionaryLink(
-        word,
-        "The entry almost certainly exists on the main site; click to open the full page on Wiktionary."
-      );
-      showTooltip(word, messageHtml + linkHtml, range);
-    }
-  } catch (error) {
-    console.error(error);
-    const messageHtml = `<div class="def-text">The public Wiktionary API did not return a definition.</div>`;
-    const linkHtml = buildWiktionaryLink(
-      word,
-      "The entry very likely exists on the website; click to open the Wiktionary page directly."
-    );
-    showTooltip(word, messageHtml + linkHtml, range);
-  }
-}
+      let fontClass = "is-sans";
+      try {
+        const parentStyle = window.getComputedStyle(textNode.parentNode);
+        const fontFamily = parentStyle.fontFamily.toLowerCase();
+        if (Overlay.isFontSerif(fontFamily)) {
+          fontClass = "is-serif";
+        }
+      } catch (e) {}
 
-function buildWiktionaryLink(term, note) {
-  const url = `https://en.wiktionary.org/wiki/${encodeURIComponent(term)}#Chinese`;
-  const noteHtml = note ? `<span class="wiktionary-note">${note}</span>` : "";
-  return `
-    <div class="wiktionary-link">
-      <a href="${url}" target="_blank" rel="noopener noreferrer">Open page on Wiktionary</a>
-      ${noteHtml}
-    </div>
-  `;
-}
+      const fragment = document.createDocumentFragment();
+      const text = textNode.nodeValue;
 
-function formatWiktionaryData(entries) {
-  let itemsHtml = "";
-  let count = 0;
+      const segmenter = Overlay.getChineseWordSegmenter();
 
-  entries.forEach((entry) => {
-    const pos = entry.partOfSpeech || "";
-    const lang = entry.language || "";
-    const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
+      if (segmenter) {
+        const segments = segmenter.segment(text);
+        for (const { segment, isWordLike } of segments) {
+          if (isWordLike && Overlay.containsChinese(segment)) {
+            const ruby = document.createElement("ruby");
+            ruby.textContent = segment;
 
-    defs.forEach((def) => {
-      if (count >= 8) return;
+            ruby.classList.add("shudz-word");
+            ruby.dataset.shudz = "1";
+            ruby.dataset.segment = segment;
 
-      const definitionHtml = def.definition || "";
+            const rt = document.createElement("rt");
+            rt.textContent = Overlay.convertToPinyin(segment);
+            rt.className = fontClass;
 
-      const examples = [];
-      if (Array.isArray(def.examples)) {
-        examples.push(...def.examples);
+            ruby.appendChild(rt);
+            fragment.appendChild(ruby);
+          } else {
+            fragment.appendChild(document.createTextNode(segment));
+          }
+        }
+      } else {
+        for (const char of text) {
+          if (Overlay.containsChinese(char)) {
+            const ruby = document.createElement("ruby");
+            ruby.textContent = char;
+
+            ruby.classList.add("shudz-word");
+            ruby.dataset.shudz = "1";
+            ruby.dataset.segment = char;
+
+            const rt = document.createElement("rt");
+            rt.textContent = Overlay.convertToPinyin(char);
+            rt.className = fontClass;
+
+            ruby.appendChild(rt);
+            fragment.appendChild(ruby);
+          } else {
+            fragment.appendChild(document.createTextNode(char));
+          }
+        }
       }
-      if (Array.isArray(def.parsedExamples)) {
-        def.parsedExamples.forEach((ex) => {
-          if (ex.example) {
-            if (ex.translation) {
-              examples.push(`${ex.example} — ${ex.translation}`);
-            } else {
-              examples.push(ex.example);
+
+      if (textNode.parentNode) {
+        textNode.parentNode.replaceChild(fragment, textNode);
+      }
+    });
+
+    if (window.requestIdleCallback) {
+      requestIdleCallback(() => Overlay.processQueueBatch());
+    } else {
+      setTimeout(Overlay.processQueueBatch, 10);
+    }
+  },
+
+  clearExistingPinyin() {
+    const body = document.body;
+    if (!body) return;
+
+    const rubyNodes = body.querySelectorAll("ruby[data-shudz='1']");
+    rubyNodes.forEach((ruby) => {
+      const segment = ruby.dataset.segment || ruby.textContent || "";
+      const textNode = document.createTextNode(segment);
+      if (ruby.parentNode) {
+        ruby.parentNode.replaceChild(textNode, ruby);
+      }
+    });
+
+    // Depois de substituir rubies por texto, vários TextNodes adjacentes
+    // podem representar o que antes era uma palavra inteira. Unificamos
+    // nós de texto adjacentes para que o segmentador funcione em strings
+    // contínuas, e não caractere por caractere.
+    Overlay.mergeAdjacentTextNodes(body);
+
+    shudzState.processingQueue = [];
+    shudzState.isProcessing = false;
+    shudzState.chineseWordSegmenter = null;
+    shudzState.pinyinHasBeenAdded = false;
+  },
+
+  reapplyPinyinWithCurrentSegmentation() {
+    Overlay.clearExistingPinyin();
+    Overlay.queueNodesForProcessing(document.body);
+  },
+
+  mergeAdjacentTextNodes(rootNode) {
+    if (!rootNode) return;
+
+    const walker = document.createTreeWalker(
+      rootNode,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+
+    let node = walker.nextNode();
+    while (node) {
+      let next = node.nextSibling;
+      while (next && next.nodeType === Node.TEXT_NODE) {
+        node.nodeValue += next.nodeValue;
+        const toRemove = next;
+        next = next.nextSibling;
+        if (toRemove.parentNode) {
+          toRemove.parentNode.removeChild(toRemove);
+        }
+      }
+      node = walker.nextNode();
+    }
+  },
+
+  updateSegmentationCssClass() {
+    const body = document.body;
+    if (!body) return;
+    body.classList.remove("shudz-word-mode", "shudz-char-mode");
+    body.classList.add(
+      shudzState.useSmartSegmentation ? "shudz-word-mode" : "shudz-char-mode"
+    );
+  },
+
+  /**
+   * Determina se a fonte fornecida é serifada.
+   */
+  isFontSerif(fontString) {
+    if (!fontString) return false;
+
+    const lower = fontString.toLowerCase();
+
+    const hasSansGeneric = lower.includes("sans-serif");
+    const hasSerifGeneric = lower.includes("serif");
+    const families = lower
+      .split(",")
+      .map((f) => f.trim().replace(/^['"]|['"]$/g, ""))
+      .filter(Boolean);
+
+    const firstFamily = families[0] || "";
+
+    const serifFamilies = [
+      "noto serif sc",
+      "noto serif",
+      "songti sc",
+      "simsun",
+      "pmingliu",
+      "times new roman",
+      "times",
+      "georgia",
+      "garamond",
+      "palatino",
+      "mincho",
+    ];
+
+    if (serifFamilies.some((name) => firstFamily.includes(name))) {
+      return true;
+    }
+    if (hasSerifGeneric && !hasSansGeneric) {
+      return true;
+    }
+    return false;
+  },
+
+  startObserver() {
+    if (shudzState.observer) return;
+
+    shudzState.observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            if (node.tagName === "RUBY" || node.tagName === "RT") return;
+            Overlay.queueNodesForProcessing(node);
+          } else if (node.nodeType === 3) {
+            if (Overlay.containsChinese(node.nodeValue)) {
+              if (node.parentNode)
+                Overlay.queueNodesForProcessing(node.parentNode);
             }
           }
         });
-      }
-
-      let exampleHtml = "";
-      if (examples.length > 0) {
-        exampleHtml += '<ul class="example-list">';
-        examples.slice(0, 2).forEach((ex) => {
-          exampleHtml += `<li class="example-item">${ex}</li>`;
-        });
-        exampleHtml += "</ul>";
-      }
-
-      const metaParts = [];
-
-      if (Array.isArray(def.tags) && def.tags.length > 0) {
-        const tags = def.tags
-          .map((t) => (typeof t === "string" ? t : ""))
-          .filter(Boolean)
-          .join(", ");
-        if (tags) metaParts.push(tags);
-      }
-
-      if (Array.isArray(def.glosses) && def.glosses.length > 0) {
-        const glosses = def.glosses
-          .map((g) => (typeof g === "string" ? g : ""))
-          .filter(Boolean)
-          .join("; ");
-        if (glosses) metaParts.push(glosses);
-      }
-
-      if (def.note && typeof def.note === "string") {
-        metaParts.push(def.note);
-      }
-
-      if (def.senseid && typeof def.senseid === "string") {
-        metaParts.push(`#${def.senseid}`);
-      }
-
-      let metaHtml = "";
-      if (metaParts.length > 0) {
-        metaHtml = `<div class="def-meta">${metaParts.join(" • ")}</div>`;
-      }
-
-      itemsHtml += "<li>";
-      if (pos) {
-        itemsHtml += `<span class="pos-tag">${pos}</span> `;
-      }
-      if (lang) {
-        itemsHtml += `<span class="lang-tag">${lang}</span> `;
-      }
-      itemsHtml += `<div class="def-text">${definitionHtml}</div>`;
-      itemsHtml += metaHtml;
-      itemsHtml += exampleHtml;
-      itemsHtml += "</li>";
-
-      count++;
+      });
     });
-  });
 
-  if (!itemsHtml) return "Definition format not supported.";
-  return `<ul>${itemsHtml}</ul>`;
-}
+    shudzState.observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  },
 
-function extractChineseDefinitions(data) {
-  if (!data || typeof data !== "object") return null;
+  containsChinese(text) {
+    if (!text) return false;
+    return /[\u4e00-\u9fff]/.test(text);
+  },
 
-  const chineseRegex = /(Chinese|Mandarin|Cantonese)/i;
-  const result = [];
+  convertToPinyin(text) {
+    try {
+      if (typeof pinyinPro === "undefined") return "";
+      const raw = pinyinPro.pinyin(text, { toneType: "mark" });
+      if (!raw) return "";
+      if (text && text.length > 1) {
+        return String(raw).replace(/\s+/g, "");
+      }
+      return raw;
+    } catch (e) {
+      return "";
+    }
+  },
 
-  Object.keys(data).forEach((key) => {
-    const entries = data[key];
-    if (!Array.isArray(entries)) return;
+  getChineseWordSegmenter() {
+    if (!shudzState.useSmartSegmentation) {
+      return null; // força fallback caractere-a-caractere
+    }
+    try {
+      if (!window.Intl || !Intl.Segmenter) return null;
+      if (!shudzState.chineseWordSegmenter) {
+        shudzState.chineseWordSegmenter = new Intl.Segmenter("zh", {
+          granularity: "word",
+        });
+      }
+      return shudzState.chineseWordSegmenter;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  detectPageLanguage() {
+    const text = document.body.innerText.slice(0, TEXT_SAMPLE_LENGTH);
+    return (text.match(/[\u4e00-\u9fa5]/g) || []).length > LANGUAGE_MIN_CHARS;
+  },
+
+  handleTextSelection(event) {
+    setTimeout(() => {
+      const selection = window.getSelection();
+      const rawText = selection.toString().trim();
+      const text = Dictionary.normalizeChineseSelection(rawText);
+      if (
+        text &&
+        Overlay.containsChinese(text) &&
+        text.length <= SELECTION_MAX_LENGTH
+      ) {
+        Dictionary.fetchDefinition(text, selection.getRangeAt(0));
+      }
+    }, 10);
+  },
+};
+
+const Dictionary = {
+  normalizeChineseSelection(text) {
+    if (!text) return "";
+
+    const matches = text.match(/[\u4e00-\u9fff]+/g);
+    if (!matches) return text;
+    return matches.join("");
+  },
+
+  createMessageNode(text) {
+    const div = document.createElement("div");
+    div.className = "def-text";
+    div.textContent = text;
+    return div;
+  },
+
+  async fetchDefinition(word, range) {
+    await Tooltip.ensureTemplateLoaded();
+
+    const loading = Dictionary.createMessageNode("Loading definition...");
+    Tooltip.show(word, loading, range);
+
+    try {
+      const data = await Dictionary.fetchWiktionaryData(word);
+      Dictionary.handleWiktionaryResponse(word, data, range);
+    } catch (error) {
+      Dictionary.showErrorTooltip(word, range);
+      console.error(error);
+    }
+  },
+
+  async fetchWiktionaryData(word) {
+    const response = await fetch(
+      `${WIKTIONARY_API_BASE}${encodeURIComponent(word)}`
+    );
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.json();
+  },
+
+  handleWiktionaryResponse(word, data, range) {
+    const fragment = document.createDocumentFragment();
+
+    if (!data) {
+      fragment.appendChild(
+        Dictionary.createMessageNode(
+          "The public Wiktionary API does not have a definition entry for this exact term."
+        )
+      );
+      fragment.appendChild(
+        Dictionary.buildWiktionaryLink(
+          word,
+          "The entry may still exist on the main site; click to open the full page on Wiktionary."
+        )
+      );
+      Tooltip.show(word, fragment, range);
+      return;
+    }
+
+    const chineseDefinitions = Dictionary.extractChineseDefinitions(data);
+
+    if (chineseDefinitions && chineseDefinitions.length > 0) {
+      const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
+      if (defsNode) {
+        fragment.appendChild(defsNode);
+      }
+      fragment.appendChild(
+        Dictionary.buildWiktionaryLink(
+          word,
+          "This definition was retrieved from the public Wiktionary API. Click to see the full entry."
+        )
+      );
+    } else {
+      fragment.appendChild(
+        Dictionary.createMessageNode(
+          "No Chinese definition is exposed by the public Wiktionary API for this term."
+        )
+      );
+      fragment.appendChild(
+        Dictionary.buildWiktionaryLink(
+          word,
+          "The entry almost certainly exists on the main site; click to open the full page on Wiktionary."
+        )
+      );
+    }
+
+    Tooltip.show(word, fragment, range);
+  },
+
+  showErrorTooltip(word, range) {
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(
+      Dictionary.createMessageNode(
+        "The public Wiktionary API did not return a definition."
+      )
+    );
+    fragment.appendChild(
+      Dictionary.buildWiktionaryLink(
+        word,
+        "The entry very likely exists on the website; click to open the Wiktionary page directly."
+      )
+    );
+    Tooltip.show(word, fragment, range);
+  },
+
+  buildWiktionaryLink(term, note) {
+    const url = `${WIKTIONARY_PAGE_BASE}${encodeURIComponent(term)}#Chinese`;
+    const container = document.createElement("div");
+    container.className = "wiktionary-link";
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Open page on Wiktionary";
+    container.appendChild(link);
+
+    if (note) {
+      const noteSpan = document.createElement("span");
+      noteSpan.className = "wiktionary-note";
+      noteSpan.textContent = note;
+      container.appendChild(noteSpan);
+    }
+
+    return container;
+  },
+
+  formatWiktionaryData(entries) {
+    const list = document.createElement("ul");
+    let count = 0;
 
     entries.forEach((entry) => {
-      if (!entry || typeof entry !== "object") return;
-      const langLabel = entry.language || "";
-      if (chineseRegex.test(langLabel)) {
-        result.push(entry);
-      }
-    });
-  });
+      const pos = entry.partOfSpeech || "";
+      const lang = entry.language || "";
+      const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
 
-  // Se nada em chinês for encontrado, tenta entradas "Translingual" como fallback
-  if (result.length === 0) {
+      defs.forEach((def) => {
+        if (count >= MAX_DEFINITIONS) return;
+
+        const li = document.createElement("li");
+
+        const definitionText = def.definition || "";
+
+        const examples = [];
+        if (Array.isArray(def.examples)) {
+          examples.push(...def.examples);
+        }
+        if (Array.isArray(def.parsedExamples)) {
+          def.parsedExamples.forEach((ex) => {
+            if (ex.example) {
+              if (ex.translation) {
+                examples.push(`${ex.example} — ${ex.translation}`);
+              } else {
+                examples.push(ex.example);
+              }
+            }
+          });
+        }
+
+        if (examples.length > 0) {
+          const exampleList = document.createElement("ul");
+          exampleList.className = "example-list";
+          examples.slice(0, MAX_EXAMPLES_PER_DEF).forEach((ex) => {
+            const liEx = document.createElement("li");
+            liEx.className = "example-item";
+            // exemplos podem conter marcação HTML da API do Wiktionary
+            liEx.innerHTML = ex;
+            exampleList.appendChild(liEx);
+          });
+          li.appendChild(exampleList);
+        }
+
+        const metaParts = [];
+
+        if (Array.isArray(def.tags) && def.tags.length > 0) {
+          const tags = def.tags
+            .map((t) => (typeof t === "string" ? t : ""))
+            .filter(Boolean)
+            .join(", ");
+          if (tags) metaParts.push(tags);
+        }
+
+        if (Array.isArray(def.glosses) && def.glosses.length > 0) {
+          const glosses = def.glosses
+            .map((g) => (typeof g === "string" ? g : ""))
+            .filter(Boolean)
+            .join("; ");
+          if (glosses) metaParts.push(glosses);
+        }
+
+        if (def.note && typeof def.note === "string") {
+          metaParts.push(def.note);
+        }
+
+        if (def.senseid && typeof def.senseid === "string") {
+          metaParts.push(`#${def.senseid}`);
+        }
+
+        if (metaParts.length > 0) {
+          const metaDiv = document.createElement("div");
+          metaDiv.className = "def-meta";
+          metaDiv.textContent = metaParts.join(" • ");
+          li.appendChild(metaDiv);
+        }
+
+        if (pos) {
+          const posSpan = document.createElement("span");
+          posSpan.className = "pos-tag";
+          posSpan.textContent = pos;
+          li.appendChild(posSpan);
+          li.appendChild(document.createTextNode(" "));
+        }
+
+        if (lang) {
+          const langSpan = document.createElement("span");
+          langSpan.className = "lang-tag";
+          langSpan.textContent = lang;
+          li.appendChild(langSpan);
+          li.appendChild(document.createTextNode(" "));
+        }
+
+        const defDiv = document.createElement("div");
+        defDiv.className = "def-text";
+        // definitionText pode conter marcação HTML vinda da API do Wiktionary
+        // (links, itálicos, etc.), então usamos innerHTML aqui.
+        defDiv.innerHTML = definitionText;
+        li.appendChild(defDiv);
+
+        list.appendChild(li);
+        count++;
+      });
+    });
+
+    return list.children.length > 0 ? list : null;
+  },
+
+  extractChineseDefinitions(data) {
+    if (!data || typeof data !== "object") return null;
+
+    const chineseRegex = /(Chinese|Mandarin|Cantonese)/i;
+    const result = [];
+
     Object.keys(data).forEach((key) => {
       const entries = data[key];
       if (!Array.isArray(entries)) return;
@@ -472,86 +663,168 @@ function extractChineseDefinitions(data) {
       entries.forEach((entry) => {
         if (!entry || typeof entry !== "object") return;
         const langLabel = entry.language || "";
-        if (/Translingual/i.test(langLabel)) {
+        if (chineseRegex.test(langLabel)) {
           result.push(entry);
         }
       });
     });
-  }
 
-  return result.length > 0 ? result : null;
-}
+    // Se nada em chinês for encontrado, tenta entradas "Translingual" como fallback
+    if (result.length === 0) {
+      Object.keys(data).forEach((key) => {
+        const entries = data[key];
+        if (!Array.isArray(entries)) return;
 
-function showTooltip(title, contentHTML, range) {
-  removeTooltip(); // Remove anterior se existir
+        entries.forEach((entry) => {
+          if (!entry || typeof entry !== "object") return;
+          const langLabel = entry.language || "";
+          if (/Translingual/i.test(langLabel)) {
+            result.push(entry);
+          }
+        });
+      });
+    }
 
-  const tooltip = document.createElement("div");
-  tooltip.id = "shudz-tooltip";
-  if (isPageDark()) {
-    tooltip.classList.add("shudz-dark");
-  }
+    return result.length > 0 ? result : null;
+  },
+};
 
-  tooltip.innerHTML = `
-    <h4>
-      <span class="word-text">${title}</span>
-      <span class="close-btn" onclick="this.parentElement.parentElement.remove()">✕</span>
-    </h4>
-    <div class="header-subtitle">Chinese dictionary · Wiktionary</div>
-    <div class="shudz-content">${contentHTML}</div>
-  `;
+const Tooltip = {
+  async ensureTemplateLoaded() {
+    if (shudzState.tooltipTemplateElement) return;
+    try {
+      const url = chrome.runtime.getURL("tooltip-template.html");
+      const html = await (await fetch(url)).text();
+      const container = document.createElement("div");
+      container.innerHTML = html.trim();
+      const template = container.querySelector("#shudz-tooltip-template");
+      if (template && template.content) {
+        shudzState.tooltipTemplateElement = template;
+      } else {
+        console.error("Shudz tooltip template not found or invalid.");
+      }
+    } catch (e) {
+      console.error("Failed to load tooltip template", e);
+    }
+  },
 
-  document.body.appendChild(tooltip);
-  currentTooltip = tooltip;
+  show(title, contentNode, range) {
+    Tooltip.remove();
+    const tooltip = Tooltip.createTooltipElement(title, contentNode);
+    Tooltip.attachTooltipCloseBehavior(tooltip);
+    document.body.appendChild(tooltip);
+    shudzState.currentTooltip = tooltip;
+    Tooltip.positionTooltip(tooltip, range);
+    setTimeout(() => {
+      document.addEventListener("click", Tooltip.closeOnClickOutside);
+    }, 100);
+  },
 
-  // --- Posicionamento Inteligente ---
-  const rect = range.getBoundingClientRect();
-  const scrollX = window.scrollX || window.pageXOffset;
-  const scrollY = window.scrollY || window.pageYOffset;
+  createTooltipElement(title, contentNode) {
+    let tooltip;
+    if (shudzState.tooltipTemplateElement) {
+      tooltip =
+        shudzState.tooltipTemplateElement.content.firstElementChild.cloneNode(
+          true
+        );
+    } else {
+      tooltip = document.createElement("div");
+      tooltip.id = "shudz-tooltip";
+      if (Tooltip.isPageDark()) {
+        tooltip.classList.add("shudz-dark");
+      }
+      tooltip.innerHTML = `
+        <h4>
+          <span class="word-text"></span>
+          <span class="close-btn">✕</span>
+        </h4>
+        <div class="header-subtitle">Chinese dictionary · Wiktionary</div>
+        <div class="shudz-content"></div>
+      `;
+    }
 
-  // Posiciona 10px abaixo da seleção
-  let top = rect.bottom + scrollY + 10;
-  let left = rect.left + scrollX;
+    if (Tooltip.isPageDark()) {
+      tooltip.classList.add("shudz-dark");
+    }
 
-  // Previne sair da tela (Direita)
-  if (left + 300 > window.innerWidth) {
-    left = window.innerWidth - 310;
-  }
+    const wordSpan = tooltip.querySelector(".word-text");
+    if (wordSpan) {
+      wordSpan.textContent = title;
+    }
 
-  tooltip.style.top = `${top}px`;
-  tooltip.style.left = `${left}px`;
+    const contentEl = tooltip.querySelector(".shudz-content");
+    if (contentEl) {
+      contentEl.textContent = "";
+      if (contentNode instanceof Node) {
+        contentEl.appendChild(contentNode);
+      }
+    }
 
-  // Listener para fechar se clicar fora
-  setTimeout(() => {
-    document.addEventListener("click", closeTooltipOnClickOutside);
-  }, 100);
-}
+    return tooltip;
+  },
 
-function isPageDark() {
-  try {
-    const style = window.getComputedStyle(document.body);
-    const color = style.backgroundColor;
-    const match = color && color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-    if (!match) return false;
-    const r = parseInt(match[1], 10);
-    const g = parseInt(match[2], 10);
-    const b = parseInt(match[3], 10);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance < 0.4;
-  } catch (e) {
-    return false;
-  }
-}
+  attachTooltipCloseBehavior(tooltip) {
+    const closeBtn = tooltip.querySelector(".close-btn");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        Tooltip.remove();
+      });
+    }
+  },
 
-function removeTooltip() {
-  if (currentTooltip) {
-    currentTooltip.remove();
-    currentTooltip = null;
-    document.removeEventListener("click", closeTooltipOnClickOutside);
-  }
-}
+  positionTooltip(tooltip, range) {
+    const rect = range.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+    let top = rect.bottom + scrollY + TOOLTIP_OFFSET_Y;
+    let left = rect.left + scrollX;
+    if (left + TOOLTIP_MAX_WIDTH > window.innerWidth) {
+      left = window.innerWidth - TOOLTIP_SAFE_MARGIN;
+    }
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+  },
 
-function closeTooltipOnClickOutside(e) {
-  if (currentTooltip && !currentTooltip.contains(e.target)) {
-    removeTooltip();
-  }
-}
+  isPageDark() {
+    try {
+      const style = window.getComputedStyle(document.body);
+      const color = style.backgroundColor;
+      const match = color && color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (!match) return false;
+      const r = parseInt(match[1], 10);
+      const g = parseInt(match[2], 10);
+      const b = parseInt(match[3], 10);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance < 0.4;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  remove() {
+    if (shudzState.currentTooltip) {
+      shudzState.currentTooltip.remove();
+      shudzState.currentTooltip = null;
+      document.removeEventListener("click", Tooltip.closeOnClickOutside);
+    }
+  },
+
+  closeOnClickOutside(e) {
+    if (
+      shudzState.currentTooltip &&
+      !shudzState.currentTooltip.contains(e.target)
+    ) {
+      Tooltip.remove();
+    }
+  },
+};
+
+// Facade para inicialização e interface principal
+const ShudzApp = {
+  start() {
+    Overlay.init();
+  },
+};
+
+// Ponto de entrada único
+ShudzApp.start();

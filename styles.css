@@ -21,12 +21,19 @@ rt.is-serif {
     "Times New Roman", serif;
 }
 
-body.pinyin-visible ruby.shudz-word {
+body.pinyin-visible.shudz-word-mode ruby.shudz-word {
   margin-right: 0;
 }
 
-body.pinyin-visible ruby.shudz-word + ruby.shudz-word {
+body.pinyin-visible.shudz-word-mode ruby.shudz-word + ruby.shudz-word {
   margin-left: 0.35em;
+}
+
+/* No extra spacing between characters in character mode */
+body.pinyin-visible.shudz-char-mode ruby.shudz-word,
+body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
+  margin-right: 0;
+  margin-left: 0;
 }
 
 #shudz-tooltip {
