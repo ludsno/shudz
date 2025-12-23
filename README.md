@@ -6,6 +6,12 @@ O foco é a aprendizagem: a língua chinesa é caracterizada pelos seus incontá
 
 ---
 
+## Imagem
+
+<img width="1920" height="1020" alt="image" src="https://github.com/user-attachments/assets/a3710e0a-3fc8-44bc-9575-acfea5065713" />
+
+---
+
 ## Funcionalidades
 
 - **Overlay de Pinyin por página (per-domain)**  
