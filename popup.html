@@ -97,10 +97,26 @@
         color: #4caf50;
         font-weight: 500;
       }
+
+      .switch-status.is-standby {
+        color: #fbc02d;
+        font-weight: 500;
+      }
     </style>
   </head>
   <body>
     <h3>Shudz &ndash; Chinese helper</h3>
+
+    <div class="switch-group">
+      <div class="switch-row">
+        <span class="switch-label">Extension enabled</span>
+        <label class="switch">
+          <input type="checkbox" id="masterToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="switch-status" id="masterStatusText">On</div>
+    </div>
 
     <div class="switch-group">
       <div class="switch-row">
@@ -122,6 +138,28 @@
         </label>
       </div>
       <div class="switch-status" id="segmentationStatusText">Words</div>
+    </div>
+
+    <div class="switch-group">
+      <div class="switch-row">
+        <span class="switch-label">Dictionary definitions</span>
+        <label class="switch">
+          <input type="checkbox" id="dictionaryToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="switch-status" id="dictionaryStatusText">On</div>
+    </div>
+
+    <div class="switch-group">
+      <div class="switch-row">
+        <span class="switch-label">Auto-activate on Chinese pages</span>
+        <label class="switch">
+          <input type="checkbox" id="autoDetectToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="switch-status" id="autoDetectStatusText">Enabled</div>
     </div>
 
     <script src="popup.js"></script>

@@ -20,41 +20,74 @@ const shudzState = {
   isProcessing: false,
   chineseWordSegmenter: null,
   currentTooltip: null,
-  useSmartSegmentation: true, // novo flag global
+  useSmartSegmentation: true,
+  useAutoDetect: true,
+  dictionaryEnabled: true,
+  masterEnabled: true,
 };
 
 const Overlay = {
   init() {
-    chrome.storage.local.get([
-      shudzState.domainKey,
-      "useSmartSegmentation",
-    ], (result) => {
-      const savedState = result[shudzState.domainKey];
-      const savedSeg = result.useSmartSegmentation;
-      if (typeof savedSeg === "boolean") {
-        shudzState.useSmartSegmentation = savedSeg;
-      }
-      if (savedState === true) {
-        if (document.readyState === "complete") {
-          Overlay.enable();
-        } else {
-          window.addEventListener("load", Overlay.enable);
+    chrome.storage.local.get(
+      [
+        shudzState.domainKey,
+        "useSmartSegmentation",
+        "useAutoDetect",
+        "useDictionary",
+        "shudz_masterEnabled",
+      ],
+      (result) => {
+        const savedState = result[shudzState.domainKey];
+        const savedSeg = result.useSmartSegmentation;
+        const savedAuto = result.useAutoDetect;
+        const savedDict = result.useDictionary;
+        const savedMaster = result.shudz_masterEnabled;
+
+        if (typeof savedSeg === "boolean") {
+          shudzState.useSmartSegmentation = savedSeg;
         }
-      } else if (savedState === false) {
-        // explicitamente desligado: não faz nada
-      } else {
-        // estado indefinido: tenta autodetectar página em chinês
-        setTimeout(() => {
-          if (Overlay.detectPageLanguage()) {
+        if (typeof savedAuto === "boolean") {
+          shudzState.useAutoDetect = savedAuto;
+        }
+        if (typeof savedDict === "boolean") {
+          shudzState.dictionaryEnabled = savedDict;
+        }
+        if (typeof savedMaster === "boolean") {
+          shudzState.masterEnabled = savedMaster;
+        }
+
+        // Se a extensão está globalmente desativada, não ligamos o overlay
+        // nem rodamos auto-detect. O usuário pode reativar depois via popup.
+        if (!shudzState.masterEnabled) {
+          return;
+        }
+
+        // Quando o auto-activate está ligado, ele tem precedência sobre o
+        // estado salvo por domínio: sempre tentamos detectar chinês e ligar
+        // automaticamente nesta página.
+        if (shudzState.useAutoDetect) {
+          Overlay.runAutoDetectOnce();
+          return;
+        }
+
+        // Auto-activate desligado: obedece apenas ao estado salvo por domínio.
+        if (savedState === true) {
+          if (document.readyState === "complete") {
             Overlay.enable();
-            chrome.storage.local.set({ [shudzState.domainKey]: true });
+          } else {
+            window.addEventListener("load", Overlay.enable);
           }
-        }, 2000);
+        } else if (savedState === false) {
+          // explicitamente desligado: não faz nada (permanece desativado)
+          Overlay.disable();
+        }
+        // Se não há estado salvo e auto-activate está desligado, deixamos
+        // o overlay desativado até o usuário ligá-lo manualmente no popup.
       }
-    });
+    );
 
     chrome.runtime.onMessage.addListener((request) => {
-      if (request.action === "togglePinyin" || request.type === "togglePinyin") {
+      if (request.type === "togglePinyin") {
         const isCurrentlyOn =
           document.body.classList.contains("pinyin-visible");
         if (isCurrentlyOn) {
@@ -74,8 +107,38 @@ const Overlay = {
         if (document.body.classList.contains("pinyin-visible")) {
           Overlay.reapplyPinyinWithCurrentSegmentation();
         }
+      } else if (request.type === "setDictionaryEnabled") {
+        shudzState.dictionaryEnabled = !!request.value;
+      } else if (request.type === "setMasterEnabled") {
+        const enabled = !!request.value;
+        shudzState.masterEnabled = enabled;
+        chrome.storage.local.set({ shudz_masterEnabled: enabled });
+
+        if (!enabled) {
+          // Desliga tudo na página atual (overlay e dicionário); estados
+          // salvos continuam intactos para futura reativação.
+          Overlay.disable();
+          return;
+        }
+
+        // Reativando: restaura o último estado salvo / auto-detect.
+        chrome.storage.local.get([shudzState.domainKey], (res) => {
+          const state = res[shudzState.domainKey];
+          if (state === true) {
+            Overlay.enable();
+          } else if (state === false) {
+            // mantemos desligado
+          } else if (shudzState.useAutoDetect) {
+            Overlay.runAutoDetectOnce();
+          }
+        });
       }
     });
+
+    // Sempre ouvimos seleções de texto; o próprio handleTextSelection
+    // respeita o flag dictionaryEnabled, então o dicionário funciona
+    // mesmo com o overlay de Pinyin desligado.
+    document.addEventListener("mouseup", Overlay.handleTextSelection);
   },
 
   enable() {
@@ -88,7 +151,6 @@ const Overlay = {
     }
 
     Overlay.startObserver();
-    document.addEventListener("mouseup", Overlay.handleTextSelection);
   },
 
   disable() {
@@ -100,7 +162,6 @@ const Overlay = {
     }
     shudzState.processingQueue = [];
     shudzState.isProcessing = false;
-    document.removeEventListener("mouseup", Overlay.handleTextSelection);
     Tooltip.remove();
   },
 
@@ -397,6 +458,7 @@ const Overlay = {
   },
 
   handleTextSelection(event) {
+    if (!shudzState.masterEnabled || !shudzState.dictionaryEnabled) return;
     setTimeout(() => {
       const selection = window.getSelection();
       const rawText = selection.toString().trim();
@@ -410,6 +472,26 @@ const Overlay = {
       }
     }, 10);
   },
+};
+
+Overlay.runAutoDetectOnce = function () {
+  // Função auxiliar fora do objeto literal para poder ser reutilizada
+  // tanto na inicialização quanto quando o master é reativado.
+  setTimeout(() => {
+    if (!shudzState.masterEnabled || !shudzState.useAutoDetect) return;
+    if (Overlay.detectPageLanguage()) {
+      // Auto-activate sempre usa word segmentation e liga o dicionário
+      shudzState.useSmartSegmentation = true;
+      shudzState.dictionaryEnabled = true;
+      Overlay.updateSegmentationCssClass();
+      Overlay.enable();
+      chrome.storage.local.set({
+        [shudzState.domainKey]: true,
+        useSmartSegmentation: true,
+        useDictionary: true,
+      });
+    }
+  }, 2000);
 };
 
 const Dictionary = {
