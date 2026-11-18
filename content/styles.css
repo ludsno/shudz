@@ -244,14 +244,14 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
 
 #shudz-tooltip.shudz-dark {
   color-scheme: dark;
-  --wikt-palette-cyan: rgba(138, 180, 248, 0.16);
+  --wikt-palette-cyan: rgba(138, 180, 248, 0.18);
   --wikt-palette-dullcyan: rgba(255, 255, 255, 0.08);
   --wikt-palette-lightyellow: rgba(253, 214, 99, 0.16);
-  --wikt-palette-darkgrey: #9aa0a6;
-  --wikt-palette-grey-9: #9aa0a6;
-  background: #202124;
+  --wikt-palette-darkgrey: #a3a8ae;
+  --wikt-palette-grey-9: #a3a8ae;
+  background: #292b2f;
   color: #e8eaed;
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.16);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 

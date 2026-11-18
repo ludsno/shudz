@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const cacheTtlSelect = document.getElementById("cacheTtlSelect");
   const cacheUsageText = document.getElementById("cacheUsageText");
   const clearCacheBtn = document.getElementById("clearCacheBtn");
+  const resetAllBtn = document.getElementById("resetAllBtn");
 
   let savedWordsMap = {};
   let cacheConfig = { ...DEFAULT_CACHE_CONFIG };
@@ -448,6 +449,43 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   });
+
+  if (resetAllBtn) {
+    resetAllBtn.addEventListener("click", () => {
+      if (
+        !window.confirm(
+          "Erase all saved words, cached definitions, per-site states, and restore default settings? This cannot be undone."
+        )
+      ) {
+        return;
+      }
+
+      chrome.storage.local.clear(() => {
+        savedWordsMap = {};
+        dictCacheMap = {};
+        cacheConfig = { ...DEFAULT_CACHE_CONFIG };
+        applyTheme("auto");
+        renderSavedWords();
+        renderCacheSettings();
+
+        chrome.tabs.query({}, (tabs) => {
+          tabs.forEach((t) => {
+            if (!t.id) return;
+            chrome.tabs.sendMessage(
+              t.id,
+              { type: "clearDictionaryCache" },
+              () => void chrome.runtime.lastError
+            );
+            chrome.tabs.sendMessage(
+              t.id,
+              { type: "setTheme", value: "auto" },
+              () => void chrome.runtime.lastError
+            );
+          });
+        });
+      });
+    });
+  }
 
   searchInput.addEventListener("input", renderSavedWords);
 

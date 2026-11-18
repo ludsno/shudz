@@ -12,12 +12,12 @@
 
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) {
-          --bg: #17171a;
+          --bg: #202226;
         }
       }
 
       :root[data-theme="dark"] {
-        --bg: #17171a;
+        --bg: #202226;
       }
 
       * {
@@ -321,6 +321,27 @@
       input:checked + .slider::before {
         transform: translateX(16px);
       }
+
+      .advanced-section {
+        margin-top: 16px;
+      }
+
+      .advanced-summary {
+        display: inline-block;
+        cursor: pointer;
+        font-size: 12px;
+        color: var(--text-muted);
+        user-select: none;
+        padding: 4px 2px;
+      }
+
+      .advanced-summary:hover {
+        color: var(--text);
+      }
+
+      .advanced-section[open] .advanced-summary {
+        margin-bottom: 8px;
+      }
     </style>
   </head>
   <body>
@@ -346,7 +367,7 @@
             aria-selected="false"
             aria-controls="panelCache"
           >
-            Cache Settings
+            Settings
           </button>
         </div>
       </header>
@@ -434,6 +455,24 @@
             </button>
           </div>
         </div>
+
+        <details class="advanced-section">
+          <summary class="advanced-summary">Advanced</summary>
+          <div class="card settings-card">
+            <div class="setting-row">
+              <div>
+                <div class="setting-title">Reset extension data</div>
+                <div class="setting-desc">
+                  Erase all saved words, cached definitions, per-site states, and
+                  restore default settings.
+                </div>
+              </div>
+              <button type="button" class="btn btn-danger" id="resetAllBtn">
+                Reset all data
+              </button>
+            </div>
+          </div>
+        </details>
       </section>
     </div>
 
