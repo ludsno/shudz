@@ -25,4 +25,5 @@ const shudzState = {
   useAutoDetect: true,
   dictionaryEnabled: true,
   masterEnabled: true,
+  theme: "auto",
 };

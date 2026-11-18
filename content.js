@@ -7,6 +7,7 @@
         "useAutoDetect",
         "useDictionary",
         "shudz_masterEnabled",
+        "shudz_theme",
       ],
       (result) => {
         const savedState = result[shudzState.domainKey];
@@ -14,6 +15,7 @@
         const savedAuto = result.useAutoDetect;
         const savedDict = result.useDictionary;
         const savedMaster = result.shudz_masterEnabled;
+        const savedTheme = result.shudz_theme;
 
         if (typeof savedSeg === "boolean") {
           shudzState.useSmartSegmentation = savedSeg;
@@ -26,6 +28,9 @@
         }
         if (typeof savedMaster === "boolean") {
           shudzState.masterEnabled = savedMaster;
+        }
+        if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "auto") {
+          shudzState.theme = savedTheme;
         }
 
         // Se a extensão está globalmente desativada, não ligamos o overlay
@@ -76,6 +81,17 @@
         }
       } else if (request.type === "setDictionaryEnabled") {
         shudzState.dictionaryEnabled = !!request.value;
+      } else if (request.type === "setTheme") {
+        const theme = request.value;
+        if (theme === "light" || theme === "dark" || theme === "auto") {
+          shudzState.theme = theme;
+          if (shudzState.currentTooltip) {
+            shudzState.currentTooltip.classList.toggle(
+              "shudz-dark",
+              Tooltip.isPageDark()
+            );
+          }
+        }
       } else if (request.type === "setMasterEnabled") {
         const enabled = !!request.value;
         shudzState.masterEnabled = enabled;

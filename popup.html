@@ -13,10 +13,13 @@
         --switch-bg: #8e918f;
         --switch-knob: #ffffff;
         --accent: #0b57d0;
+        --seg-bg: rgba(0, 0, 0, 0.06);
+        --seg-active: #ffffff;
+        --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
       }
 
       @media (prefers-color-scheme: dark) {
-        :root {
+        :root:not([data-theme="light"]) {
           --bg: #202124;
           --text: #e8eaed;
           --text-muted: #9aa0a6;
@@ -25,7 +28,29 @@
           --switch-bg: #5f6368;
           --switch-knob: #202124;
           --accent: #8ab4f8;
+          --seg-bg: rgba(255, 255, 255, 0.08);
+          --seg-active: #35363a;
+          --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
         }
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #202124;
+        --text: #e8eaed;
+        --text-muted: #9aa0a6;
+        --border: rgba(255, 255, 255, 0.12);
+        --row-hover: rgba(255, 255, 255, 0.06);
+        --switch-bg: #5f6368;
+        --switch-knob: #202124;
+        --accent: #8ab4f8;
+        --seg-bg: rgba(255, 255, 255, 0.08);
+        --seg-active: #35363a;
+        --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
       }
 
       * {
@@ -33,9 +58,9 @@
       }
 
       body {
-        width: 248px;
+        width: 260px;
         margin: 0;
-        padding: 10px 8px;
+        padding: 10px 8px 8px;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
           Roboto, sans-serif;
         font-size: 13px;
@@ -60,6 +85,21 @@
         letter-spacing: 0.01em;
       }
 
+      .tab-notice {
+        display: none;
+        margin: 4px 8px 6px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background-color: var(--seg-bg);
+        color: var(--text-muted);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .tab-notice.is-visible {
+        display: block;
+      }
+
       .setting-row {
         display: flex;
         align-items: center;
@@ -73,6 +113,14 @@
 
       .setting-row:hover {
         background-color: var(--row-hover);
+      }
+
+      .setting-row.static-row {
+        cursor: default;
+      }
+
+      .setting-row.static-row:hover {
+        background-color: transparent;
       }
 
       .setting-label {
@@ -144,12 +192,71 @@
         outline: 2px solid var(--accent);
         outline-offset: 2px;
       }
+
+      .segmented {
+        display: inline-flex;
+        padding: 2px;
+        border-radius: 6px;
+        background-color: var(--seg-bg);
+        gap: 2px;
+      }
+
+      .segmented button {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 3px 7px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+      }
+
+      .segmented button[aria-pressed="true"] {
+        background-color: var(--seg-active);
+        color: var(--text);
+        box-shadow: var(--seg-shadow);
+      }
+
+      .segmented button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+
+      .popup-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px 2px;
+        margin-top: 4px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      .footer-link {
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.12s ease;
+      }
+
+      .footer-link:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
     </style>
   </head>
   <body>
     <header class="popup-header">
       <h1 class="popup-title">Shudz</h1>
     </header>
+
+    <div class="tab-notice" id="tabNotice">
+      Page overlay is unavailable on browser internal pages.
+    </div>
 
     <label class="setting-row" for="masterToggle">
       <span class="setting-label">Extension enabled</span>
@@ -194,6 +301,35 @@
         </span>
       </label>
     </div>
+
+    <div class="divider"></div>
+
+    <div class="setting-row static-row">
+      <span class="setting-label">Theme</span>
+      <div class="segmented" role="group" aria-label="Theme">
+        <button type="button" data-theme-value="auto" aria-pressed="true">
+          Auto
+        </button>
+        <button type="button" data-theme-value="light" aria-pressed="false">
+          Light
+        </button>
+        <button type="button" data-theme-value="dark" aria-pressed="false">
+          Dark
+        </button>
+      </div>
+    </div>
+
+    <footer class="popup-footer">
+      <span id="versionText"></span>
+      <a
+        class="footer-link"
+        href="https://github.com/ludsno/shudz"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        GitHub ↗
+      </a>
+    </footer>
 
     <script src="popup.js"></script>
   </body>

@@ -109,6 +109,9 @@ const Tooltip = {
   },
 
   isPageDark() {
+    if (shudzState.theme === "dark") return true;
+    if (shudzState.theme === "light") return false;
+
     try {
       const bodyLum = Tooltip.getBackgroundLuminance(document.body);
       if (bodyLum !== null) return bodyLum < 0.4;

@@ -5,99 +5,108 @@ document.addEventListener("DOMContentLoaded", async () => {
   const segmentationToggle = document.getElementById("segmentationToggle");
   const dictionaryToggle = document.getElementById("dictionaryToggle");
   const autoDetectToggle = document.getElementById("autoDetectToggle");
+  const tabNotice = document.getElementById("tabNotice");
+  const versionText = document.getElementById("versionText");
+  const themeButtons = document.querySelectorAll("[data-theme-value]");
+
+  const manifest = chrome.runtime.getManifest();
+  if (versionText && manifest?.version) {
+    versionText.textContent = `v${manifest.version}`;
+  }
 
   const [tab] = await chrome.tabs.query({
     active: true,
     currentWindow: true,
   });
 
-  if (!tab?.url) return;
+  const isSupportedTab = Boolean(
+    tab?.id && tab?.url && /^https?:|^file:/i.test(tab.url)
+  );
 
-  const url = new URL(tab.url);
-  const domainKey = "pinyin_state_" + url.hostname;
+  if (!isSupportedTab && tabNotice) {
+    tabNotice.classList.add("is-visible");
+  }
+
+  const domainKey = isSupportedTab
+    ? "pinyin_state_" + new URL(tab.url).hostname
+    : null;
   const segmentationKey = "useSmartSegmentation";
   const autoDetectKey = "useAutoDetect";
   const dictionaryKey = "useDictionary";
   const masterKey = "shudz_masterEnabled";
+  const themeKey = "shudz_theme";
 
-  chrome.storage.local.get(
-    [domainKey, segmentationKey, autoDetectKey, dictionaryKey, masterKey],
-    (result) => {
+  const keysToLoad = [
+    segmentationKey,
+    autoDetectKey,
+    dictionaryKey,
+    masterKey,
+    themeKey,
+  ];
+  if (domainKey) {
+    keysToLoad.push(domainKey);
+  }
+
+  chrome.storage.local.get(keysToLoad, (result) => {
+    if (domainKey) {
       toggleCheckbox.checked = result[domainKey] === true;
-
-      if (tab.id) {
-        chrome.tabs.sendMessage(
-          tab.id,
-          { type: "getPinyinState" },
-          (response) => {
-            if (chrome.runtime.lastError) return;
-            if (response && typeof response.enabled === "boolean") {
-              toggleCheckbox.checked = response.enabled;
-            }
-          }
-        );
-      }
-
-      segmentationToggle.checked =
-        typeof result[segmentationKey] === "boolean"
-          ? result[segmentationKey]
-          : true;
-
-      autoDetectToggle.checked =
-        typeof result[autoDetectKey] === "boolean"
-          ? result[autoDetectKey]
-          : true;
-
-      dictionaryToggle.checked =
-        typeof result[dictionaryKey] === "boolean"
-          ? result[dictionaryKey]
-          : true;
-
-      const masterEnabled =
-        typeof result[masterKey] === "boolean" ? result[masterKey] : true;
-      masterToggle.checked = masterEnabled;
-      updateSecondaryState(masterEnabled);
+      sendToTab({ type: "getPinyinState" }, (response) => {
+        if (response && typeof response.enabled === "boolean") {
+          toggleCheckbox.checked = response.enabled;
+        }
+      });
+    } else {
+      toggleCheckbox.checked = false;
+      toggleCheckbox.disabled = true;
     }
-  );
+
+    segmentationToggle.checked =
+      typeof result[segmentationKey] === "boolean"
+        ? result[segmentationKey]
+        : true;
+
+    autoDetectToggle.checked =
+      typeof result[autoDetectKey] === "boolean"
+        ? result[autoDetectKey]
+        : true;
+
+    dictionaryToggle.checked =
+      typeof result[dictionaryKey] === "boolean"
+        ? result[dictionaryKey]
+        : true;
+
+    const masterEnabled =
+      typeof result[masterKey] === "boolean" ? result[masterKey] : true;
+    masterToggle.checked = masterEnabled;
+    updateSecondaryState(masterEnabled);
+
+    const savedTheme =
+      result[themeKey] === "light" ||
+      result[themeKey] === "dark" ||
+      result[themeKey] === "auto"
+        ? result[themeKey]
+        : "auto";
+    applyTheme(savedTheme);
+  });
 
   toggleCheckbox.addEventListener("change", () => {
+    if (!domainKey) return;
     const enabled = toggleCheckbox.checked;
     chrome.storage.local.set({ [domainKey]: enabled });
-    if (tab.id) {
-      chrome.tabs.sendMessage(
-        tab.id,
-        {
-          type: "togglePinyin",
-          value: enabled,
-        },
-        () => {
-          void chrome.runtime.lastError;
-        }
-      );
-    }
+    sendToTab({ type: "togglePinyin", value: enabled });
   });
 
   masterToggle.addEventListener("change", () => {
     const enabled = masterToggle.checked;
     updateSecondaryState(enabled);
     chrome.storage.local.set({ [masterKey]: enabled });
-    if (tab.id) {
-      chrome.tabs.sendMessage(tab.id, {
-        type: "setMasterEnabled",
-        value: enabled,
-      });
-    }
+    sendToTab({ type: "setMasterEnabled", value: enabled });
   });
 
   segmentationToggle.addEventListener("change", () => {
     const useSmartSegmentation = segmentationToggle.checked;
     chrome.storage.local.set({ [segmentationKey]: useSmartSegmentation });
-    if (tab.id) {
-      chrome.tabs.sendMessage(tab.id, {
-        type: "setSegmentation",
-        value: useSmartSegmentation,
-      });
-    }
+    sendToTab({ type: "setSegmentation", value: useSmartSegmentation });
   });
 
   autoDetectToggle.addEventListener("change", () => {
@@ -107,19 +116,41 @@ document.addEventListener("DOMContentLoaded", async () => {
   dictionaryToggle.addEventListener("change", () => {
     const useDictionary = dictionaryToggle.checked;
     chrome.storage.local.set({ [dictionaryKey]: useDictionary });
-    if (tab.id) {
-      chrome.tabs.sendMessage(tab.id, {
-        type: "setDictionaryEnabled",
-        value: useDictionary,
-      });
-    }
+    sendToTab({ type: "setDictionaryEnabled", value: useDictionary });
   });
+
+  themeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const theme = btn.dataset.themeValue || "auto";
+      applyTheme(theme);
+      chrome.storage.local.set({ [themeKey]: theme });
+      sendToTab({ type: "setTheme", value: theme });
+    });
+  });
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    themeButtons.forEach((btn) => {
+      btn.setAttribute(
+        "aria-pressed",
+        String(btn.dataset.themeValue === theme)
+      );
+    });
+  }
 
   function updateSecondaryState(isOn) {
     secondaryControls.classList.toggle("is-disabled", !isOn);
-    toggleCheckbox.disabled = !isOn;
+    toggleCheckbox.disabled = !isOn || !isSupportedTab;
     segmentationToggle.disabled = !isOn;
     dictionaryToggle.disabled = !isOn;
     autoDetectToggle.disabled = !isOn;
+  }
+
+  function sendToTab(message, callback) {
+    if (!isSupportedTab) return;
+    chrome.tabs.sendMessage(tab.id, message, (response) => {
+      if (chrome.runtime.lastError) return;
+      if (callback) callback(response);
+    });
   }
 });
