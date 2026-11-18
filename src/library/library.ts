@@ -1,8 +1,10 @@
+import { buildSafeHtmlFragment, htmlToPlainText } from "../shared/html";
 import {
   DEFAULT_CACHE_CONFIG,
   SHUDZ_KEYS,
   normalizeTheme,
 } from "../shared/storage";
+import { buildNormalizedIndex } from "../shared/text";
 import type {
   CacheConfig,
   CachedEntry,
@@ -10,12 +12,6 @@ import type {
   ShudzMessage,
   ThemeMode,
 } from "../shared/types";
-
-interface NormalizedIndex {
-  src: string;
-  norm: string;
-  ranges: Array<[number, number]>;
-}
 
 document.addEventListener("DOMContentLoaded", () => {
   const tabWords = document.getElementById("tabWords") as HTMLButtonElement;
@@ -112,46 +108,8 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  function normalizeForSearch(value: unknown): string {
-    return String(value || "")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-  }
-
-  function normalizePinyinForSearch(value: unknown): string {
-    return normalizeForSearch(value).replace(/\s+/g, "");
-  }
-
-  function buildNormalizedIndex(
-    text: string,
-    { isPinyin = false }: { isPinyin?: boolean } = {}
-  ): NormalizedIndex {
-    const src = String(text || "");
-    let norm = "";
-    const ranges: Array<[number, number]> = [];
-
-    for (let i = 0; i < src.length; ) {
-      const cp = src.codePointAt(i) ?? 0;
-      const charLen = cp > 0xffff ? 2 : 1;
-      const ch = src.slice(i, i + charLen);
-      let piece = ch
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase();
-
-      if (isPinyin) {
-        piece = piece.replace(/\s+/g, "").replace(/v/g, "u");
-      }
-
-      for (let j = 0; j < piece.length; j++) {
-        norm += piece[j];
-        ranges.push([i, i + charLen]);
-      }
-      i += charLen;
-    }
-
-    return { src, norm, ranges };
+  function normalizeText(value: unknown, isPinyin = false): string {
+    return buildNormalizedIndex(String(value || ""), { isPinyin }).norm;
   }
 
   function appendHighlightedText(
@@ -208,12 +166,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function htmlToPlainText(html?: string): string {
-    if (!html) return "";
-    const doc = new DOMParser().parseFromString(String(html), "text/html");
-    return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
-  }
-
   function appendRichContent(
     container: Node,
     html: string | undefined,
@@ -225,53 +177,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const doc = new DOMParser().parseFromString(String(html), "text/html");
-    const allowedTags = new Set([
-      "SPAN",
-      "B",
-      "I",
-      "STRONG",
-      "EM",
-      "SMALL",
-      "SUB",
-      "SUP",
-    ]);
-
-    function importSafe(node: ChildNode): Node | null {
-      if (node.nodeType === Node.TEXT_NODE) {
+    container.appendChild(
+      buildSafeHtmlFragment(html, (text) => {
         const frag = document.createDocumentFragment();
-        appendHighlightedText(frag, node.textContent || "", rawQuery);
+        appendHighlightedText(frag, text, rawQuery);
         return frag;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return null;
-
-      const elem = node as Element;
-      const tag = elem.tagName;
-      if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK") return null;
-
-      const frag = document.createDocumentFragment();
-      elem.childNodes.forEach((child) => {
-        const imported = importSafe(child);
-        if (imported) frag.appendChild(imported);
-      });
-
-      if (!allowedTags.has(tag)) return frag;
-
-      const el = document.createElement(tag.toLowerCase());
-      const style = elem.getAttribute("style");
-      if (style) el.setAttribute("style", style);
-      const cls = elem.getAttribute("class");
-      if (cls) el.setAttribute("class", cls);
-      const lang = elem.getAttribute("lang");
-      if (lang) el.setAttribute("lang", lang);
-      el.appendChild(frag);
-      return el;
-    }
-
-    doc.body.childNodes.forEach((child) => {
-      const imported = importSafe(child);
-      if (imported) container.appendChild(imported);
-    });
+      })
+    );
   }
 
   function getFilteredWords(): SavedWord[] {
@@ -279,27 +191,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const entries = Object.values(savedWordsMap).reverse();
     if (!rawQuery) return entries;
 
-    const query = normalizeForSearch(rawQuery);
-    const pinyinQuery = normalizePinyinForSearch(rawQuery).replace(/v/g, "u");
+    const query = normalizeText(rawQuery);
+    const pinyinQuery = normalizeText(rawQuery, true);
 
     return entries.filter((item) => {
-      if (normalizeForSearch(item.word).includes(query)) return true;
-      if (normalizeForSearch(item.resolvedTerm).includes(query)) return true;
-
-      const normPinyin = normalizePinyinForSearch(item.pinyin).replace(
-        /v/g,
-        "u"
-      );
-      if (normPinyin.includes(pinyinQuery)) return true;
+      if (normalizeText(item.word).includes(query)) return true;
+      if (normalizeText(item.resolvedTerm).includes(query)) return true;
+      if (normalizeText(item.pinyin, true).includes(pinyinQuery)) return true;
 
       const defs = Array.isArray(item.definitions) ? item.definitions : [];
       return defs.some((d) => {
         const defText = d.text || htmlToPlainText(d.html);
-        if (normalizeForSearch(defText).includes(query)) return true;
+        if (normalizeText(defText).includes(query)) return true;
         return (
           Array.isArray(d.examples) &&
           d.examples.some((ex) =>
-            normalizeForSearch(htmlToPlainText(ex)).includes(query)
+            normalizeText(htmlToPlainText(ex)).includes(query)
           )
         );
       });

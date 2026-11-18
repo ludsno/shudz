@@ -1,9 +1,15 @@
 import {
+  buildSafeHtmlFragment,
+  htmlToPlainText,
+  sanitizeWiktionaryHtml,
+} from "../shared/html";
+import {
   DEFAULT_CACHE_CONFIG,
   SHUDZ_KEYS,
   storageGet,
   storageSet,
 } from "../shared/storage";
+import { normalizeChineseSelection } from "../shared/text";
 import type {
   CachedEntry,
   SavedDefinition,
@@ -28,14 +34,10 @@ interface HtmlFallbackResult {
   resolvedTerm: string;
 }
 
-export const Dictionary = {
-  normalizeChineseSelection(text: string): string {
-    if (!text) return "";
+let latestLookupId = 0;
 
-    const matches = text.match(/[\u4e00-\u9fff]+/g);
-    if (!matches) return text;
-    return matches.join("");
-  },
+export const Dictionary = {
+  normalizeChineseSelection,
 
   createMessageNode(text: string): HTMLDivElement {
     const div = document.createElement("div");
@@ -45,15 +47,20 @@ export const Dictionary = {
   },
 
   async fetchDefinition(word: string, range: Range): Promise<void> {
+    const requestId = ++latestLookupId;
     await Tooltip.ensureTemplateLoaded();
+    if (requestId !== latestLookupId) return;
 
     const cached = await Dictionary.getCachedEntry(word);
+    if (requestId !== latestLookupId) return;
+
     if (cached) {
       await Dictionary.renderDefinitions(
         word,
         cached.definitions,
         cached.resolvedTerm || word,
-        range
+        range,
+        requestId
       );
       return;
     }
@@ -63,8 +70,10 @@ export const Dictionary = {
 
     try {
       const data = await Dictionary.fetchWiktionaryData(word);
-      await Dictionary.handleWiktionaryResponse(word, data, range);
+      if (requestId !== latestLookupId) return;
+      await Dictionary.handleWiktionaryResponse(word, data, range, requestId);
     } catch (error) {
+      if (requestId !== latestLookupId) return;
       Dictionary.showErrorTooltip(word, range);
       console.error(error);
     }
@@ -216,69 +225,6 @@ export const Dictionary = {
     shudzState.dictionaryCache.clear();
   },
 
-  htmlToPlainText(html: string): string {
-    if (!html) return "";
-    const doc = new DOMParser().parseFromString(String(html), "text/html");
-    return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
-  },
-
-  sanitizeWiktionaryHtml(html: string): string {
-    if (!html) return "";
-    const doc = new DOMParser().parseFromString(String(html), "text/html");
-    const allowedTags = new Set([
-      "SPAN",
-      "B",
-      "I",
-      "STRONG",
-      "EM",
-      "SMALL",
-      "SUB",
-      "SUP",
-    ]);
-
-    function cleanNode(node: ChildNode): Node | null {
-      if (node.nodeType === Node.TEXT_NODE) {
-        return document.createTextNode(node.textContent || "");
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) {
-        return null;
-      }
-
-      const elem = node as Element;
-      const tag = elem.tagName;
-      if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK") {
-        return null;
-      }
-
-      const frag = document.createDocumentFragment();
-      elem.childNodes.forEach((child) => {
-        const cleaned = cleanNode(child);
-        if (cleaned) frag.appendChild(cleaned);
-      });
-
-      if (!allowedTags.has(tag)) {
-        return frag;
-      }
-
-      const el = document.createElement(tag.toLowerCase());
-      const style = elem.getAttribute("style");
-      if (style) el.setAttribute("style", style);
-      const cls = elem.getAttribute("class");
-      if (cls) el.setAttribute("class", cls);
-      const lang = elem.getAttribute("lang");
-      if (lang) el.setAttribute("lang", lang);
-      el.appendChild(frag);
-      return el;
-    }
-
-    const wrapper = document.createElement("div");
-    doc.body.childNodes.forEach((child) => {
-      const cleaned = cleanNode(child);
-      if (cleaned) wrapper.appendChild(cleaned);
-    });
-    return wrapper.innerHTML.trim();
-  },
-
   extractSavedDefinitions(entries: WiktionaryEntry[]): SavedDefinition[] {
     const result: SavedDefinition[] = [];
     let count = 0;
@@ -288,8 +234,8 @@ export const Dictionary = {
       const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
       for (const def of defs) {
         if (count >= MAX_DEFINITIONS) break;
-        const html = Dictionary.sanitizeWiktionaryHtml(def.definition || "");
-        const text = Dictionary.htmlToPlainText(html);
+        const html = sanitizeWiktionaryHtml(def.definition || "");
+        const text = htmlToPlainText(html);
         const examplesRaw: string[] = [];
         if (Array.isArray(def.examples)) {
           examplesRaw.push(...def.examples);
@@ -307,8 +253,8 @@ export const Dictionary = {
         }
         const examples = examplesRaw
           .slice(0, MAX_EXAMPLES_PER_DEF)
-          .map((ex) => Dictionary.sanitizeWiktionaryHtml(ex))
-          .filter((ex) => Dictionary.htmlToPlainText(ex).length > 0);
+          .map((ex) => sanitizeWiktionaryHtml(ex))
+          .filter((ex) => htmlToPlainText(ex).length > 0);
 
         if (text || examples.length > 0) {
           result.push({
@@ -367,7 +313,8 @@ export const Dictionary = {
     word: string,
     chineseDefinitions: WiktionaryEntry[],
     resolvedTerm: string,
-    range: Range
+    range: Range,
+    requestId?: number
   ): Promise<void> {
     const fragment = document.createDocumentFragment();
     const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
@@ -381,6 +328,8 @@ export const Dictionary = {
     fragment.appendChild(Dictionary.buildWiktionaryLink(resolvedTerm, note));
 
     const isSaved = await Dictionary.isWordSaved(word);
+    if (requestId !== undefined && requestId !== latestLookupId) return;
+
     Tooltip.show(word, fragment, range, {
       isSaved,
       onToggleSave: () =>
@@ -413,7 +362,8 @@ export const Dictionary = {
   async handleWiktionaryResponse(
     word: string,
     data: WiktionaryApiResponse | null,
-    range: Range
+    range: Range,
+    requestId?: number
   ): Promise<void> {
     const fragment = document.createDocumentFragment();
 
@@ -424,6 +374,7 @@ export const Dictionary = {
 
     if (!chineseDefinitions || chineseDefinitions.length === 0) {
       const htmlFallback = await Dictionary.fetchChineseFromHtml(word);
+      if (requestId !== undefined && requestId !== latestLookupId) return;
       if (htmlFallback && htmlFallback.definitions.length > 0) {
         chineseDefinitions = htmlFallback.definitions;
         resolvedTerm = htmlFallback.resolvedTerm || word;
@@ -436,11 +387,13 @@ export const Dictionary = {
 
     if (chineseDefinitions && chineseDefinitions.length > 0) {
       await Dictionary.setCachedEntry(word, chineseDefinitions, resolvedTerm);
+      if (requestId !== undefined && requestId !== latestLookupId) return;
       await Dictionary.renderDefinitions(
         word,
         chineseDefinitions,
         resolvedTerm,
-        range
+        range,
+        requestId
       );
       return;
     } else if (!data) {
@@ -661,7 +614,7 @@ export const Dictionary = {
 
         const defDiv = document.createElement("div");
         defDiv.className = "def-text";
-        defDiv.innerHTML = definitionText;
+        defDiv.appendChild(buildSafeHtmlFragment(definitionText));
         li.appendChild(defDiv);
 
         const metaParts: string[] = [];
@@ -719,7 +672,7 @@ export const Dictionary = {
           examples.slice(0, MAX_EXAMPLES_PER_DEF).forEach((ex) => {
             const liEx = document.createElement("li");
             liEx.className = "example-item";
-            liEx.innerHTML = ex;
+            liEx.appendChild(buildSafeHtmlFragment(ex));
             if ((liEx.textContent || "").trim()) {
               exampleList.appendChild(liEx);
             }

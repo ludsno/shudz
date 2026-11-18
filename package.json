@@ -5,6 +5,7 @@
   "description": "Chrome extension that adds Pinyin above Chinese characters and quick Wiktionary definitions.",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch"
   },
