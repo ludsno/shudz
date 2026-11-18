@@ -2,7 +2,19 @@
   <div id="shudz-tooltip" role="dialog" aria-label="Dictionary definition">
     <div class="shudz-header">
       <span class="word-text"></span>
-      <button type="button" class="close-btn" aria-label="Close">✕</button>
+      <div class="shudz-header-actions">
+        <button
+          type="button"
+          class="save-btn"
+          aria-label="Save word"
+          aria-pressed="false"
+          title="Save word"
+          hidden
+        >
+          ☆
+        </button>
+        <button type="button" class="close-btn" aria-label="Close">✕</button>
+      </div>
     </div>
     <div class="shudz-content"></div>
   </div>

@@ -13,6 +13,7 @@
       "16": "assets/icon.png"
     }
   },
+  "options_page": "library/library.html",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

@@ -9,6 +9,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const versionText = document.getElementById("versionText");
   const themeButtons = document.querySelectorAll("[data-theme-value]");
   const clearCacheBtn = document.getElementById("clearCacheBtn");
+  const openLibraryBtn = document.getElementById("openLibraryBtn");
+
+  if (openLibraryBtn) {
+    openLibraryBtn.addEventListener("click", () => {
+      chrome.runtime.openOptionsPage();
+    });
+  }
 
   const manifest = chrome.runtime.getManifest();
   if (versionText && manifest?.version) {

@@ -8,6 +8,7 @@
         "useDictionary",
         "shudz_masterEnabled",
         "shudz_theme",
+        CACHE_CONFIG_KEY,
       ],
       (result) => {
         const savedState = result[shudzState.domainKey];
@@ -16,6 +17,7 @@
         const savedDict = result.useDictionary;
         const savedMaster = result.shudz_masterEnabled;
         const savedTheme = result.shudz_theme;
+        const savedCacheConfig = result[CACHE_CONFIG_KEY];
 
         if (typeof savedSeg === "boolean") {
           shudzState.useSmartSegmentation = savedSeg;
@@ -31,6 +33,12 @@
         }
         if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "auto") {
           shudzState.theme = savedTheme;
+        }
+        if (savedCacheConfig && typeof savedCacheConfig === "object") {
+          shudzState.cacheConfig = {
+            ...DEFAULT_CACHE_CONFIG,
+            ...savedCacheConfig,
+          };
         }
 
         // Se a extensão está globalmente desativada, não ligamos o overlay
@@ -117,6 +125,34 @@
             Overlay.runAutoDetectOnce();
           }
         });
+      }
+    });
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local") return;
+      if (changes[CACHE_CONFIG_KEY]?.newValue) {
+        shudzState.cacheConfig = {
+          ...DEFAULT_CACHE_CONFIG,
+          ...changes[CACHE_CONFIG_KEY].newValue,
+        };
+        if (!shudzState.cacheConfig.enabled) {
+          Dictionary.clearCache();
+        }
+      }
+      if (changes[DICT_CACHE_KEY] && !changes[DICT_CACHE_KEY].newValue) {
+        Dictionary.clearCache();
+      }
+      if (changes.shudz_theme?.newValue) {
+        const nextTheme = changes.shudz_theme.newValue;
+        if (nextTheme === "light" || nextTheme === "dark" || nextTheme === "auto") {
+          shudzState.theme = nextTheme;
+          if (shudzState.currentTooltip) {
+            shudzState.currentTooltip.classList.toggle(
+              "shudz-dark",
+              Tooltip.isPageDark()
+            );
+          }
+        }
       }
     });
 

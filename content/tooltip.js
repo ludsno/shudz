@@ -17,9 +17,13 @@ const Tooltip = {
     }
   },
 
-  show(title, contentNode, range) {
+  show(title, contentNode, range, saveOptions = null) {
     Tooltip.remove();
-    const tooltip = Tooltip.createTooltipElement(title, contentNode);
+    const tooltip = Tooltip.createTooltipElement(
+      title,
+      contentNode,
+      saveOptions
+    );
     Tooltip.attachTooltipCloseBehavior(tooltip);
     document.body.appendChild(tooltip);
     shudzState.currentTooltip = tooltip;
@@ -30,7 +34,7 @@ const Tooltip = {
     }, 100);
   },
 
-  createTooltipElement(title, contentNode) {
+  createTooltipElement(title, contentNode, saveOptions = null) {
     let tooltip;
     if (shudzState.tooltipTemplateElement) {
       tooltip =
@@ -45,7 +49,10 @@ const Tooltip = {
       tooltip.innerHTML = `
         <div class="shudz-header">
           <span class="word-text"></span>
-          <button type="button" class="close-btn" aria-label="Close">✕</button>
+          <div class="shudz-header-actions">
+            <button type="button" class="save-btn" aria-label="Save word" aria-pressed="false" title="Save word" hidden>☆</button>
+            <button type="button" class="close-btn" aria-label="Close">✕</button>
+          </div>
         </div>
         <div class="shudz-content"></div>
       `;
@@ -60,6 +67,21 @@ const Tooltip = {
       wordSpan.textContent = title;
     }
 
+    const saveBtn = tooltip.querySelector(".save-btn");
+    if (saveBtn && saveOptions && typeof saveOptions.onToggleSave === "function") {
+      saveBtn.hidden = false;
+      Tooltip.updateSaveButtonState(saveBtn, Boolean(saveOptions.isSaved));
+      saveBtn.addEventListener("click", async () => {
+        saveBtn.disabled = true;
+        try {
+          const nowSaved = await saveOptions.onToggleSave();
+          Tooltip.updateSaveButtonState(saveBtn, Boolean(nowSaved));
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+    }
+
     const contentEl = tooltip.querySelector(".shudz-content");
     if (contentEl) {
       contentEl.textContent = "";
@@ -69,6 +91,15 @@ const Tooltip = {
     }
 
     return tooltip;
+  },
+
+  updateSaveButtonState(btn, isSaved) {
+    btn.textContent = isSaved ? "★" : "☆";
+    btn.classList.toggle("is-saved", isSaved);
+    btn.setAttribute("aria-pressed", String(isSaved));
+    const label = isSaved ? "Remove from saved words" : "Save word";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("title", label);
   },
 
   attachTooltipCloseBehavior(tooltip) {

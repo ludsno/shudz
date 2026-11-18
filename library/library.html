@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shudz — Saved Words &amp; Settings</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8f9fa;
+        --surface: #ffffff;
+        --text: #1f1f1f;
+        --text-muted: #5f6368;
+        --border: rgba(0, 0, 0, 0.12);
+        --hover: rgba(0, 0, 0, 0.04);
+        --accent: #0b57d0;
+        --accent-soft: rgba(11, 87, 208, 0.08);
+        --danger: #c5221f;
+        --switch-bg: #8e918f;
+        --switch-knob: #ffffff;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #17171a;
+          --surface: #202124;
+          --text: #e8eaed;
+          --text-muted: #9aa0a6;
+          --border: rgba(255, 255, 255, 0.12);
+          --hover: rgba(255, 255, 255, 0.06);
+          --accent: #8ab4f8;
+          --accent-soft: rgba(138, 180, 248, 0.12);
+          --danger: #f28b82;
+          --switch-bg: #5f6368;
+          --switch-knob: #202124;
+        }
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #17171a;
+        --surface: #202124;
+        --text: #e8eaed;
+        --text-muted: #9aa0a6;
+        --border: rgba(255, 255, 255, 0.12);
+        --hover: rgba(255, 255, 255, 0.06);
+        --accent: #8ab4f8;
+        --accent-soft: rgba(138, 180, 248, 0.12);
+        --danger: #f28b82;
+        --switch-bg: #5f6368;
+        --switch-knob: #202124;
+      }
+
+      :root[data-theme="light"] {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        background-color: var(--bg);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 760px;
+        margin: 0 auto;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .page-title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      .tabs {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background-color: var(--surface);
+      }
+
+      .tab-btn {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+      }
+
+      .tab-btn[aria-selected="true"] {
+        background-color: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .tab-panel[hidden] {
+        display: none;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .search-input {
+        flex: 1 1 220px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background-color: var(--surface);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 13px;
+      }
+
+      .search-input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        background-color: var(--surface);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 7px 11px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.12s ease, opacity 0.12s ease;
+      }
+
+      .btn:hover:not(:disabled) {
+        background-color: var(--hover);
+      }
+
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .btn-danger {
+        color: var(--danger);
+      }
+
+      .card {
+        background-color: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+
+      .word-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .word-card {
+        padding: 12px 14px;
+      }
+
+      .word-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .word-main {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .word-hanzi {
+        font-size: 17px;
+        font-weight: 600;
+      }
+
+      .word-trad {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .word-pinyin {
+        font-size: 13px;
+        color: var(--accent);
+        font-weight: 500;
+      }
+
+      .word-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .word-preview {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .word-details {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        font-size: 13px;
+      }
+
+      .word-details[hidden] {
+        display: none;
+      }
+
+      .def-item {
+        margin-bottom: 8px;
+      }
+
+      .def-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .def-pos {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-right: 6px;
+      }
+
+      .def-examples {
+        margin: 4px 0 0;
+        padding-left: 10px;
+        border-left: 2px solid var(--border);
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .word-meta-footer {
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--text-muted);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .word-meta-footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .word-meta-footer a:hover {
+        text-decoration: underline;
+      }
+
+      .empty-state {
+        padding: 36px 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+      }
+
+      .settings-card {
+        padding: 4px 16px;
+      }
+
+      .setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .setting-row:last-child {
+        border-bottom: none;
+      }
+
+      .setting-title {
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .setting-desc {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      select {
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background-color: var(--surface);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 13px;
+      }
+
+      .switch {
+        position: relative;
+        display: inline-block;
+        flex-shrink: 0;
+        width: 36px;
+        height: 20px;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        margin: 0;
+      }
+
+      .slider {
+        position: absolute;
+        inset: 0;
+        background-color: var(--switch-bg);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background-color 0.18s ease;
+      }
+
+      .slider::before {
+        content: "";
+        position: absolute;
+        height: 16px;
+        width: 16px;
+        left: 2px;
+        top: 2px;
+        background-color: var(--switch-knob);
+        border-radius: 50%;
+        transition: transform 0.18s ease;
+      }
+
+      input:checked + .slider {
+        background-color: var(--accent);
+      }
+
+      input:checked + .slider::before {
+        transform: translateX(16px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header class="page-header">
+        <h1 class="page-title">Shudz</h1>
+        <div class="tabs" role="tablist">
+          <button
+            type="button"
+            class="tab-btn"
+            role="tab"
+            id="tabWords"
+            aria-selected="true"
+            aria-controls="panelWords"
+          >
+            Saved Words (<span id="savedCount">0</span>)
+          </button>
+          <button
+            type="button"
+            class="tab-btn"
+            role="tab"
+            id="tabCache"
+            aria-selected="false"
+            aria-controls="panelCache"
+          >
+            Cache Settings
+          </button>
+        </div>
+      </header>
+
+      <section
+        class="tab-panel"
+        id="panelWords"
+        role="tabpanel"
+        aria-labelledby="tabWords"
+      >
+        <div class="toolbar">
+          <input
+            type="search"
+            class="search-input"
+            id="searchInput"
+            placeholder="Search by word, pinyin, or definition..."
+          />
+          <button type="button" class="btn" id="exportJsonBtn">Export JSON</button>
+          <button type="button" class="btn" id="exportCsvBtn">Export CSV</button>
+          <button type="button" class="btn" id="exportTsvBtn">Export Anki (TSV)</button>
+          <button type="button" class="btn btn-danger" id="clearWordsBtn">
+            Clear all
+          </button>
+        </div>
+
+        <div class="word-list" id="wordList"></div>
+      </section>
+
+      <section
+        class="tab-panel"
+        id="panelCache"
+        role="tabpanel"
+        aria-labelledby="tabCache"
+        hidden
+      >
+        <div class="card settings-card">
+          <label class="setting-row" for="cacheEnabledToggle">
+            <div>
+              <div class="setting-title">Enable dictionary cache</div>
+              <div class="setting-desc">
+                Store recent Wiktionary lookups locally for faster repeat definitions.
+              </div>
+            </div>
+            <span class="switch">
+              <input type="checkbox" id="cacheEnabledToggle" />
+              <span class="slider"></span>
+            </span>
+          </label>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Maximum cached entries</div>
+              <div class="setting-desc">
+                Oldest entries are removed automatically when this limit is reached.
+              </div>
+            </div>
+            <select id="cacheMaxSelect">
+              <option value="100">100 words</option>
+              <option value="200">200 words</option>
+              <option value="500">500 words</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Cache expiration (TTL)</div>
+              <div class="setting-desc">
+                How long cached definitions remain valid before refreshing.
+              </div>
+            </div>
+            <select id="cacheTtlSelect">
+              <option value="1">1 day</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <div class="setting-title">Current cache usage</div>
+              <div class="setting-desc" id="cacheUsageText">0 / 200 entries (0 KB)</div>
+            </div>
+            <button type="button" class="btn btn-danger" id="clearCacheBtn">
+              Clear cache
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="library.js"></script>
+  </body>
+</html>

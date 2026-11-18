@@ -77,6 +77,14 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   text-overflow: ellipsis;
 }
 
+#shudz-tooltip .shudz-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+#shudz-tooltip .save-btn,
 #shudz-tooltip .close-btn {
   appearance: none;
   background: transparent;
@@ -97,11 +105,29 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+#shudz-tooltip .save-btn {
+  font-size: 14px;
+}
+
+#shudz-tooltip .save-btn[hidden] {
+  display: none;
+}
+
+#shudz-tooltip .save-btn.is-saved {
+  color: #0b57d0;
+}
+
+#shudz-tooltip .save-btn:hover,
 #shudz-tooltip .close-btn:hover {
   color: #1f1f1f;
   background: rgba(0, 0, 0, 0.06);
 }
 
+#shudz-tooltip .save-btn.is-saved:hover {
+  color: #0b57d0;
+}
+
+#shudz-tooltip .save-btn:focus-visible,
 #shudz-tooltip .close-btn:focus-visible {
   outline: 2px solid #0b57d0;
   outline-offset: 1px;
@@ -228,15 +254,26 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   color: #ffffff;
 }
 
+#shudz-tooltip.shudz-dark .save-btn,
 #shudz-tooltip.shudz-dark .close-btn {
   color: #9aa0a6;
 }
 
+#shudz-tooltip.shudz-dark .save-btn.is-saved {
+  color: #8ab4f8;
+}
+
+#shudz-tooltip.shudz-dark .save-btn:hover,
 #shudz-tooltip.shudz-dark .close-btn:hover {
   color: #e8eaed;
   background: rgba(255, 255, 255, 0.1);
 }
 
+#shudz-tooltip.shudz-dark .save-btn.is-saved:hover {
+  color: #8ab4f8;
+}
+
+#shudz-tooltip.shudz-dark .save-btn:focus-visible,
 #shudz-tooltip.shudz-dark .close-btn:focus-visible {
   outline-color: #8ab4f8;
 }
