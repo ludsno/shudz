@@ -1,5 +1,35 @@
-const Dictionary = {
-  normalizeChineseSelection(text) {
+import {
+  DEFAULT_CACHE_CONFIG,
+  SHUDZ_KEYS,
+  storageGet,
+  storageSet,
+} from "../shared/storage";
+import type {
+  CachedEntry,
+  SavedDefinition,
+  SavedWord,
+  WiktionaryApiResponse,
+  WiktionaryDefinition,
+  WiktionaryEntry,
+} from "../shared/types";
+import { convertToPinyin } from "./pinyin";
+import {
+  MAX_DEFINITIONS,
+  MAX_EXAMPLES_PER_DEF,
+  WIKTIONARY_API_BASE,
+  WIKTIONARY_HTML_BASE,
+  WIKTIONARY_PAGE_BASE,
+  shudzState,
+} from "./state";
+import { Tooltip } from "./tooltip";
+
+interface HtmlFallbackResult {
+  definitions: WiktionaryEntry[];
+  resolvedTerm: string;
+}
+
+export const Dictionary = {
+  normalizeChineseSelection(text: string): string {
     if (!text) return "";
 
     const matches = text.match(/[\u4e00-\u9fff]+/g);
@@ -7,14 +37,14 @@ const Dictionary = {
     return matches.join("");
   },
 
-  createMessageNode(text) {
+  createMessageNode(text: string): HTMLDivElement {
     const div = document.createElement("div");
     div.className = "def-text";
     div.textContent = text;
     return div;
   },
 
-  async fetchDefinition(word, range) {
+  async fetchDefinition(word: string, range: Range): Promise<void> {
     await Tooltip.ensureTemplateLoaded();
 
     const cached = await Dictionary.getCachedEntry(word);
@@ -40,18 +70,20 @@ const Dictionary = {
     }
   },
 
-  trimEntriesForCache(entries) {
-    const trimmed = [];
+  trimEntriesForCache(entries: WiktionaryEntry[]): WiktionaryEntry[] {
+    const trimmed: WiktionaryEntry[] = [];
     let count = 0;
 
     for (const entry of entries) {
       if (count >= MAX_DEFINITIONS) break;
       const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
-      const keptDefs = [];
+      const keptDefs: WiktionaryDefinition[] = [];
 
       for (const def of defs) {
         if (count >= MAX_DEFINITIONS) break;
-        const cleanDef = { definition: def.definition || "" };
+        const cleanDef: WiktionaryDefinition = {
+          definition: def.definition || "",
+        };
         if (Array.isArray(def.examples) && def.examples.length > 0) {
           cleanDef.examples = def.examples.slice(0, MAX_EXAMPLES_PER_DEF);
         }
@@ -85,7 +117,7 @@ const Dictionary = {
     return trimmed;
   },
 
-  getCacheSettings() {
+  getCacheSettings(): { enabled: boolean; maxEntries: number; ttlMs: number } {
     const cfg = shudzState.cacheConfig || DEFAULT_CACHE_CONFIG;
     const enabled = cfg.enabled !== false;
     const maxEntries =
@@ -93,7 +125,9 @@ const Dictionary = {
         ? Number(cfg.maxEntries)
         : DEFAULT_CACHE_CONFIG.maxEntries;
     const ttlDays =
-      Number(cfg.ttlDays) > 0 ? Number(cfg.ttlDays) : DEFAULT_CACHE_CONFIG.ttlDays;
+      Number(cfg.ttlDays) > 0
+        ? Number(cfg.ttlDays)
+        : DEFAULT_CACHE_CONFIG.ttlDays;
     return {
       enabled,
       maxEntries,
@@ -101,7 +135,7 @@ const Dictionary = {
     };
   },
 
-  async getCachedEntry(word) {
+  async getCachedEntry(word: string): Promise<CachedEntry | null> {
     const { enabled, ttlMs } = Dictionary.getCacheSettings();
     if (!enabled) return null;
 
@@ -114,7 +148,9 @@ const Dictionary = {
       shudzState.dictionaryCache.delete(word);
     }
 
-    const result = await storageGet([SHUDZ_KEYS.DICT_CACHE]);
+    const result = await storageGet<Record<string, Record<string, CachedEntry>>>([
+      SHUDZ_KEYS.DICT_CACHE,
+    ]);
     const cacheObj = result[SHUDZ_KEYS.DICT_CACHE];
     const stored =
       cacheObj && typeof cacheObj === "object" ? cacheObj[word] : null;
@@ -130,11 +166,15 @@ const Dictionary = {
     return null;
   },
 
-  async setCachedEntry(word, definitions, resolvedTerm) {
+  async setCachedEntry(
+    word: string,
+    definitions: WiktionaryEntry[],
+    resolvedTerm: string
+  ): Promise<void> {
     const { enabled, maxEntries, ttlMs } = Dictionary.getCacheSettings();
     if (!enabled || !definitions || definitions.length === 0) return;
 
-    const payload = {
+    const payload: CachedEntry = {
       definitions: Dictionary.trimEntriesForCache(definitions),
       resolvedTerm: resolvedTerm || word,
       cachedAt: Date.now(),
@@ -143,13 +183,13 @@ const Dictionary = {
 
     shudzState.dictionaryCache.set(word, payload);
 
-    const result = await storageGet([SHUDZ_KEYS.DICT_CACHE]);
+    const result = await storageGet<Record<string, Record<string, CachedEntry>>>([
+      SHUDZ_KEYS.DICT_CACHE,
+    ]);
     const now = Date.now();
-    const cacheObj =
-      result[SHUDZ_KEYS.DICT_CACHE] &&
-      typeof result[SHUDZ_KEYS.DICT_CACHE] === "object"
-        ? { ...result[SHUDZ_KEYS.DICT_CACHE] }
-        : {};
+    const rawCache = result[SHUDZ_KEYS.DICT_CACHE];
+    const cacheObj: Record<string, CachedEntry> =
+      rawCache && typeof rawCache === "object" ? { ...rawCache } : {};
 
     for (const key of Object.keys(cacheObj)) {
       const item = cacheObj[key];
@@ -172,17 +212,17 @@ const Dictionary = {
     await storageSet({ [SHUDZ_KEYS.DICT_CACHE]: cacheObj });
   },
 
-  clearCache() {
+  clearCache(): void {
     shudzState.dictionaryCache.clear();
   },
 
-  htmlToPlainText(html) {
+  htmlToPlainText(html: string): string {
     if (!html) return "";
     const doc = new DOMParser().parseFromString(String(html), "text/html");
     return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
   },
 
-  sanitizeWiktionaryHtml(html) {
+  sanitizeWiktionaryHtml(html: string): string {
     if (!html) return "";
     const doc = new DOMParser().parseFromString(String(html), "text/html");
     const allowedTags = new Set([
@@ -196,21 +236,22 @@ const Dictionary = {
       "SUP",
     ]);
 
-    function cleanNode(node) {
+    function cleanNode(node: ChildNode): Node | null {
       if (node.nodeType === Node.TEXT_NODE) {
-        return document.createTextNode(node.textContent);
+        return document.createTextNode(node.textContent || "");
       }
       if (node.nodeType !== Node.ELEMENT_NODE) {
         return null;
       }
 
-      const tag = node.tagName;
+      const elem = node as Element;
+      const tag = elem.tagName;
       if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK") {
         return null;
       }
 
       const frag = document.createDocumentFragment();
-      node.childNodes.forEach((child) => {
+      elem.childNodes.forEach((child) => {
         const cleaned = cleanNode(child);
         if (cleaned) frag.appendChild(cleaned);
       });
@@ -220,11 +261,11 @@ const Dictionary = {
       }
 
       const el = document.createElement(tag.toLowerCase());
-      const style = node.getAttribute("style");
+      const style = elem.getAttribute("style");
       if (style) el.setAttribute("style", style);
-      const cls = node.getAttribute("class");
+      const cls = elem.getAttribute("class");
       if (cls) el.setAttribute("class", cls);
-      const lang = node.getAttribute("lang");
+      const lang = elem.getAttribute("lang");
       if (lang) el.setAttribute("lang", lang);
       el.appendChild(frag);
       return el;
@@ -238,8 +279,8 @@ const Dictionary = {
     return wrapper.innerHTML.trim();
   },
 
-  extractSavedDefinitions(entries) {
-    const result = [];
+  extractSavedDefinitions(entries: WiktionaryEntry[]): SavedDefinition[] {
+    const result: SavedDefinition[] = [];
     let count = 0;
 
     for (const entry of entries) {
@@ -249,7 +290,7 @@ const Dictionary = {
         if (count >= MAX_DEFINITIONS) break;
         const html = Dictionary.sanitizeWiktionaryHtml(def.definition || "");
         const text = Dictionary.htmlToPlainText(html);
-        const examplesRaw = [];
+        const examplesRaw: string[] = [];
         if (Array.isArray(def.examples)) {
           examplesRaw.push(...def.examples);
         }
@@ -285,19 +326,25 @@ const Dictionary = {
     return result;
   },
 
-  async isWordSaved(word) {
-    const result = await storageGet([SHUDZ_KEYS.SAVED_WORDS]);
+  async isWordSaved(word: string): Promise<boolean> {
+    const result = await storageGet<Record<string, Record<string, SavedWord>>>([
+      SHUDZ_KEYS.SAVED_WORDS,
+    ]);
     const saved = result[SHUDZ_KEYS.SAVED_WORDS];
     return Boolean(saved && typeof saved === "object" && saved[word]);
   },
 
-  async toggleSavedWord(word, resolvedTerm, entries) {
-    const result = await storageGet([SHUDZ_KEYS.SAVED_WORDS]);
-    const saved =
-      result[SHUDZ_KEYS.SAVED_WORDS] &&
-      typeof result[SHUDZ_KEYS.SAVED_WORDS] === "object"
-        ? { ...result[SHUDZ_KEYS.SAVED_WORDS] }
-        : {};
+  async toggleSavedWord(
+    word: string,
+    resolvedTerm: string,
+    entries: WiktionaryEntry[]
+  ): Promise<boolean> {
+    const result = await storageGet<Record<string, Record<string, SavedWord>>>([
+      SHUDZ_KEYS.SAVED_WORDS,
+    ]);
+    const rawSaved = result[SHUDZ_KEYS.SAVED_WORDS];
+    const saved: Record<string, SavedWord> =
+      rawSaved && typeof rawSaved === "object" ? { ...rawSaved } : {};
 
     if (saved[word]) {
       delete saved[word];
@@ -305,10 +352,7 @@ const Dictionary = {
       return false;
     }
 
-    const pinyin =
-      typeof Overlay !== "undefined" && Overlay.convertToPinyin
-        ? Overlay.convertToPinyin(word)
-        : "";
+    const pinyin = convertToPinyin(word);
     saved[word] = {
       word,
       resolvedTerm: resolvedTerm || word,
@@ -319,7 +363,12 @@ const Dictionary = {
     return true;
   },
 
-  async renderDefinitions(word, chineseDefinitions, resolvedTerm, range) {
+  async renderDefinitions(
+    word: string,
+    chineseDefinitions: WiktionaryEntry[],
+    resolvedTerm: string,
+    range: Range
+  ): Promise<void> {
     const fragment = document.createDocumentFragment();
     const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
     if (defsNode) {
@@ -339,7 +388,7 @@ const Dictionary = {
     });
   },
 
-  async fetchWiktionaryData(word) {
+  async fetchWiktionaryData(word: string): Promise<WiktionaryApiResponse | null> {
     const response = await fetch(
       `${WIKTIONARY_API_BASE}${encodeURIComponent(word)}`
     );
@@ -347,10 +396,10 @@ const Dictionary = {
       if (response.status === 404) return null;
       throw new Error(`HTTP ${response.status}`);
     }
-    return await response.json();
+    return (await response.json()) as WiktionaryApiResponse;
   },
 
-  async fetchWiktionaryHtml(word) {
+  async fetchWiktionaryHtml(word: string): Promise<string | null> {
     const response = await fetch(
       `${WIKTIONARY_HTML_BASE}${encodeURIComponent(word)}`
     );
@@ -361,7 +410,11 @@ const Dictionary = {
     return await response.text();
   },
 
-  async handleWiktionaryResponse(word, data, range) {
+  async handleWiktionaryResponse(
+    word: string,
+    data: WiktionaryApiResponse | null,
+    range: Range
+  ): Promise<void> {
     const fragment = document.createDocumentFragment();
 
     let chineseDefinitions = data
@@ -382,7 +435,7 @@ const Dictionary = {
     }
 
     if (chineseDefinitions && chineseDefinitions.length > 0) {
-      Dictionary.setCachedEntry(word, chineseDefinitions, resolvedTerm);
+      await Dictionary.setCachedEntry(word, chineseDefinitions, resolvedTerm);
       await Dictionary.renderDefinitions(
         word,
         chineseDefinitions,
@@ -419,7 +472,10 @@ const Dictionary = {
     Tooltip.show(word, fragment, range);
   },
 
-  async fetchChineseFromHtml(word, visited = new Set()) {
+  async fetchChineseFromHtml(
+    word: string,
+    visited: Set<string> = new Set()
+  ): Promise<HtmlFallbackResult | null> {
     if (visited.has(word)) return null;
     visited.add(word);
 
@@ -452,7 +508,7 @@ const Dictionary = {
     return null;
   },
 
-  extractZhSeeTarget(chineseSection) {
+  extractZhSeeTarget(chineseSection: Element): string | null {
     const zhSeeTable = chineseSection.querySelector(".zh-see");
     if (zhSeeTable) {
       const hantLink = zhSeeTable.querySelector(".Hant a[href]");
@@ -484,10 +540,10 @@ const Dictionary = {
     return null;
   },
 
-  parseChineseSectionFromHtml(chineseSection) {
+  parseChineseSectionFromHtml(chineseSection: Element): WiktionaryEntry[] {
     const skipHeadingRegex =
       /^(Glyph origin|Etymology|Pronunciation|Compounds|Descendants|Derived terms|Related terms|Usage notes|References|See also|Further reading|External links|Trivia|Notes)/i;
-    const entries = [];
+    const entries: WiktionaryEntry[] = [];
 
     const sections = chineseSection.querySelectorAll("section");
     sections.forEach((sec) => {
@@ -498,12 +554,12 @@ const Dictionary = {
       const posText = (heading.textContent || "").trim();
       if (!posText || skipHeadingRegex.test(posText)) return;
 
-      const definitions = [];
+      const definitions: WiktionaryDefinition[] = [];
       const items = ol.querySelectorAll(":scope > li");
       items.forEach((li) => {
-        const clone = li.cloneNode(true);
+        const clone = li.cloneNode(true) as Element;
         const exampleNodes = clone.querySelectorAll("dl, ul");
-        const examples = [];
+        const examples: string[] = [];
         exampleNodes.forEach((node) => {
           const text = (node.textContent || "").trim();
           if (text) examples.push(node.innerHTML);
@@ -533,7 +589,7 @@ const Dictionary = {
     return entries;
   },
 
-  showErrorTooltip(word, range) {
+  showErrorTooltip(word: string, range: Range): void {
     const fragment = document.createDocumentFragment();
     fragment.appendChild(
       Dictionary.createMessageNode(
@@ -549,7 +605,7 @@ const Dictionary = {
     Tooltip.show(word, fragment, range);
   },
 
-  buildWiktionaryLink(term, note) {
+  buildWiktionaryLink(term: string, note: string | null): HTMLDivElement {
     const url = `${WIKTIONARY_PAGE_BASE}${encodeURIComponent(term)}#Chinese`;
     const container = document.createElement("div");
     container.className = "wiktionary-link";
@@ -571,7 +627,7 @@ const Dictionary = {
     return container;
   },
 
-  formatWiktionaryData(entries) {
+  formatWiktionaryData(entries: WiktionaryEntry[]): HTMLUListElement | null {
     const list = document.createElement("ul");
     let count = 0;
 
@@ -605,12 +661,10 @@ const Dictionary = {
 
         const defDiv = document.createElement("div");
         defDiv.className = "def-text";
-        // definitionText pode conter marcação HTML vinda da API do Wiktionary
-        // (links, itálicos, etc.), então usamos innerHTML aqui.
         defDiv.innerHTML = definitionText;
         li.appendChild(defDiv);
 
-        const metaParts = [];
+        const metaParts: string[] = [];
 
         if (Array.isArray(def.tags) && def.tags.length > 0) {
           const tags = def.tags
@@ -643,7 +697,7 @@ const Dictionary = {
           li.appendChild(metaDiv);
         }
 
-        const examples = [];
+        const examples: string[] = [];
         if (Array.isArray(def.examples)) {
           examples.push(...def.examples);
         }
@@ -665,9 +719,8 @@ const Dictionary = {
           examples.slice(0, MAX_EXAMPLES_PER_DEF).forEach((ex) => {
             const liEx = document.createElement("li");
             liEx.className = "example-item";
-            // exemplos podem conter marcação HTML da API do Wiktionary
             liEx.innerHTML = ex;
-            if (liEx.textContent.trim()) {
+            if ((liEx.textContent || "").trim()) {
               exampleList.appendChild(liEx);
             }
           });
@@ -684,11 +737,14 @@ const Dictionary = {
     return list.children.length > 0 ? list : null;
   },
 
-  extractChineseDefinitions(data, { allowTranslingual = true } = {}) {
+  extractChineseDefinitions(
+    data: WiktionaryApiResponse | null,
+    { allowTranslingual = true }: { allowTranslingual?: boolean } = {}
+  ): WiktionaryEntry[] | null {
     if (!data || typeof data !== "object") return null;
 
     const chineseRegex = /(Chinese|Mandarin|Cantonese)/i;
-    const result = [];
+    const result: WiktionaryEntry[] = [];
 
     Object.keys(data).forEach((key) => {
       const entries = data[key];
@@ -703,7 +759,6 @@ const Dictionary = {
       });
     });
 
-    // Se nada em chinês for encontrado, tenta entradas "Translingual" como fallback
     if (result.length === 0 && allowTranslingual) {
       Object.keys(data).forEach((key) => {
         const entries = data[key];

@@ -1,5 +1,22 @@
-﻿const Overlay = {
-  init() {
+import {
+  DEFAULT_CACHE_CONFIG,
+  SHUDZ_KEYS,
+  normalizeTheme,
+} from "../shared/storage";
+import type { CacheConfig, ShudzMessage } from "../shared/types";
+import { Dictionary } from "./dictionary";
+import { convertToPinyin } from "./pinyin";
+import {
+  LANGUAGE_MIN_CHARS,
+  PROCESS_BATCH_SIZE,
+  SELECTION_MAX_LENGTH,
+  TEXT_SAMPLE_LENGTH,
+  shudzState,
+} from "./state";
+import { Tooltip } from "./tooltip";
+
+export const Overlay = {
+  init(): void {
     chrome.storage.local.get(
       [
         shudzState.domainKey,
@@ -17,7 +34,9 @@
         const savedDict = result[SHUDZ_KEYS.DICTIONARY];
         const savedMaster = result[SHUDZ_KEYS.MASTER_ENABLED];
         const savedTheme = result[SHUDZ_KEYS.THEME];
-        const savedCacheConfig = result[SHUDZ_KEYS.CACHE_CONFIG];
+        const savedCacheConfig = result[SHUDZ_KEYS.CACHE_CONFIG] as
+          | Partial<CacheConfig>
+          | undefined;
 
         if (typeof savedSeg === "boolean") {
           shudzState.useSmartSegmentation = savedSeg;
@@ -41,8 +60,6 @@
           };
         }
 
-        // Se a extensão está globalmente desativada, não ligamos o overlay
-        // nem rodamos auto-detect. O usuário pode reativar depois via popup.
         if (!shudzState.masterEnabled) {
           return;
         }
@@ -61,79 +78,78 @@
       }
     );
 
-    chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-      if (request.type === "getPinyinState") {
-        sendResponse({
-          enabled: document.body.classList.contains("pinyin-visible"),
-        });
-      } else if (request.type === "togglePinyin" || request.type === "setPinyinEnabled") {
-        const shouldEnable =
-          typeof request.value === "boolean"
-            ? request.value
-            : !document.body.classList.contains("pinyin-visible");
-        if (shouldEnable) {
-          Overlay.enable();
-        } else {
-          Overlay.disable();
-        }
-        chrome.storage.local.set({ [shudzState.domainKey]: shouldEnable });
-      } else if (request.type === "setSegmentation") {
-        const newValue = !!request.value;
-        if (shudzState.useSmartSegmentation === newValue) {
-          return;
-        }
-        shudzState.useSmartSegmentation = newValue;
-        Overlay.updateSegmentationCssClass();
-        if (document.body.classList.contains("pinyin-visible")) {
-          Overlay.reapplyPinyinWithCurrentSegmentation();
-        }
-      } else if (request.type === "setDictionaryEnabled") {
-        shudzState.dictionaryEnabled = !!request.value;
-      } else if (request.type === "clearDictionaryCache") {
-        Dictionary.clearCache();
-      } else if (request.type === "setTheme") {
-        const theme = request.value;
-        if (theme === "light" || theme === "dark" || theme === "auto") {
-          shudzState.theme = theme;
+    chrome.runtime.onMessage.addListener(
+      (request: ShudzMessage, _sender, sendResponse) => {
+        if (request.type === "getPinyinState") {
+          sendResponse({
+            enabled: document.body.classList.contains("pinyin-visible"),
+          });
+        } else if (
+          request.type === "togglePinyin" ||
+          request.type === "setPinyinEnabled"
+        ) {
+          const shouldEnable =
+            typeof request.value === "boolean"
+              ? request.value
+              : !document.body.classList.contains("pinyin-visible");
+          if (shouldEnable) {
+            Overlay.enable();
+          } else {
+            Overlay.disable();
+          }
+          chrome.storage.local.set({ [shudzState.domainKey]: shouldEnable });
+        } else if (request.type === "setSegmentation") {
+          const newValue = !!request.value;
+          if (shudzState.useSmartSegmentation === newValue) {
+            return;
+          }
+          shudzState.useSmartSegmentation = newValue;
+          Overlay.updateSegmentationCssClass();
+          if (document.body.classList.contains("pinyin-visible")) {
+            Overlay.reapplyPinyinWithCurrentSegmentation();
+          }
+        } else if (request.type === "setDictionaryEnabled") {
+          shudzState.dictionaryEnabled = !!request.value;
+        } else if (request.type === "clearDictionaryCache") {
+          Dictionary.clearCache();
+        } else if (request.type === "setTheme") {
+          shudzState.theme = normalizeTheme(request.value);
           if (shudzState.currentTooltip) {
             shudzState.currentTooltip.classList.toggle(
               "shudz-dark",
               Tooltip.isPageDark()
             );
           }
-        }
-      } else if (request.type === "setMasterEnabled") {
-        const enabled = !!request.value;
-        shudzState.masterEnabled = enabled;
-        chrome.storage.local.set({ shudz_masterEnabled: enabled });
+        } else if (request.type === "setMasterEnabled") {
+          const enabled = !!request.value;
+          shudzState.masterEnabled = enabled;
+          chrome.storage.local.set({ [SHUDZ_KEYS.MASTER_ENABLED]: enabled });
 
-        if (!enabled) {
-          // Desliga tudo na página atual (overlay e dicionário); estados
-          // salvos continuam intactos para futura reativação.
-          Overlay.disable();
-          return;
-        }
-
-        // Reativando: restaura o último estado salvo / auto-detect.
-        chrome.storage.local.get([shudzState.domainKey], (res) => {
-          const state = res[shudzState.domainKey];
-          if (state === true) {
-            Overlay.enable();
-          } else if (state === false) {
-            // mantemos desligado
-          } else if (shudzState.useAutoDetect) {
-            Overlay.runAutoDetectOnce();
+          if (!enabled) {
+            Overlay.disable();
+            return;
           }
-        });
+
+          chrome.storage.local.get([shudzState.domainKey], (res) => {
+            const state = res[shudzState.domainKey];
+            if (state === true) {
+              Overlay.enable();
+            } else if (state === false) {
+              // keep disabled
+            } else if (shudzState.useAutoDetect) {
+              Overlay.runAutoDetectOnce();
+            }
+          });
+        }
       }
-    });
+    );
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return;
       if (changes[SHUDZ_KEYS.CACHE_CONFIG]?.newValue) {
         shudzState.cacheConfig = {
           ...DEFAULT_CACHE_CONFIG,
-          ...changes[SHUDZ_KEYS.CACHE_CONFIG].newValue,
+          ...(changes[SHUDZ_KEYS.CACHE_CONFIG].newValue as Partial<CacheConfig>),
         };
         if (!shudzState.cacheConfig.enabled) {
           Dictionary.clearCache();
@@ -156,13 +172,10 @@
       }
     });
 
-    // Sempre ouvimos seleções de texto; o próprio handleTextSelection
-    // respeita o flag dictionaryEnabled, então o dicionário funciona
-    // mesmo com o overlay de Pinyin desligado.
     document.addEventListener("mouseup", Overlay.handleTextSelection);
   },
 
-  enable() {
+  enable(): void {
     document.body.classList.add("pinyin-visible");
     Overlay.updateSegmentationCssClass();
 
@@ -174,7 +187,7 @@
     Overlay.startObserver();
   },
 
-  disable() {
+  disable(): void {
     document.body.classList.remove("pinyin-visible");
     document.body.classList.remove("shudz-word-mode", "shudz-char-mode");
     if (shudzState.observer) {
@@ -186,27 +199,23 @@
     Tooltip.remove();
   },
 
-  /**
-   * Enfileira os nós de texto contendo caracteres chineses para processamento.
-   * @param {Node} rootNode - O nó raiz para iniciar a busca.
-   */
-  queueNodesForProcessing(rootNode) {
+  queueNodesForProcessing(rootNode: Node | null): void {
     if (!rootNode) return;
 
     const walker = document.createTreeWalker(
       rootNode,
       NodeFilter.SHOW_TEXT,
-      null,
-      false
+      null
     );
 
-    let node;
+    let node: Node | null;
     while ((node = walker.nextNode())) {
-      const parent = node.parentElement;
+      const textNode = node as Text;
+      const parent = textNode.parentElement;
       if (!parent) continue;
       const tag = parent.tagName;
       if (
-        Overlay.containsChinese(node.nodeValue) &&
+        Overlay.containsChinese(textNode.nodeValue || "") &&
         tag !== "SCRIPT" &&
         tag !== "STYLE" &&
         tag !== "TEXTAREA" &&
@@ -216,7 +225,7 @@
         !parent.isContentEditable &&
         !parent.closest("#shudz-tooltip")
       ) {
-        shudzState.processingQueue.push(node);
+        shudzState.processingQueue.push(textNode);
       }
     }
     if (!shudzState.isProcessing) {
@@ -224,10 +233,7 @@
     }
   },
 
-  /**
-   * Processa o lote de nós de texto enfileirados, convertendo caracteres chineses em pinyin.
-   */
-  processQueueBatch() {
+  processQueueBatch(): void {
     if (shudzState.processingQueue.length === 0) {
       shudzState.isProcessing = false;
       return;
@@ -242,15 +248,19 @@
 
       let fontClass = "is-sans";
       try {
-        const parentStyle = window.getComputedStyle(textNode.parentNode);
-        const fontFamily = parentStyle.fontFamily.toLowerCase();
-        if (Overlay.isFontSerif(fontFamily)) {
-          fontClass = "is-serif";
+        if (textNode.parentElement) {
+          const parentStyle = window.getComputedStyle(textNode.parentElement);
+          const fontFamily = parentStyle.fontFamily.toLowerCase();
+          if (Overlay.isFontSerif(fontFamily)) {
+            fontClass = "is-serif";
+          }
         }
-      } catch (e) {}
+      } catch {
+        // ignore style read errors
+      }
 
       const fragment = document.createDocumentFragment();
-      const text = textNode.nodeValue;
+      const text = textNode.nodeValue || "";
 
       const segmenter = Overlay.getChineseWordSegmenter();
 
@@ -278,14 +288,14 @@
       }
     });
 
-    if (window.requestIdleCallback) {
-      requestIdleCallback(() => Overlay.processQueueBatch());
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(() => Overlay.processQueueBatch());
     } else {
-      setTimeout(Overlay.processQueueBatch, 10);
+      setTimeout(() => Overlay.processQueueBatch(), 10);
     }
   },
 
-  createRubyNode(segment, fontClass) {
+  createRubyNode(segment: string, fontClass: string): HTMLElement {
     const ruby = document.createElement("ruby");
     ruby.textContent = segment;
     ruby.classList.add("shudz-word");
@@ -293,18 +303,20 @@
     ruby.dataset.segment = segment;
 
     const rt = document.createElement("rt");
-    rt.textContent = Overlay.convertToPinyin(segment);
+    rt.textContent = convertToPinyin(segment);
     rt.className = fontClass;
 
     ruby.appendChild(rt);
     return ruby;
   },
 
-  clearExistingPinyin() {
+  clearExistingPinyin(): void {
     const body = document.body;
     if (!body) return;
 
-    const rubyNodes = body.querySelectorAll("ruby[data-shudz='1']");
+    const rubyNodes = body.querySelectorAll<HTMLElement>(
+      "ruby[data-shudz='1']"
+    );
     rubyNodes.forEach((ruby) => {
       const segment = ruby.dataset.segment || ruby.textContent || "";
       const textNode = document.createTextNode(segment);
@@ -313,10 +325,6 @@
       }
     });
 
-    // Depois de substituir rubies por texto, vários TextNodes adjacentes
-    // podem representar o que antes era uma palavra inteira. Unificamos
-    // nós de texto adjacentes para que o segmentador funcione em strings
-    // contínuas, e não caractere por caractere.
     Overlay.mergeAdjacentTextNodes(body);
 
     shudzState.processingQueue = [];
@@ -325,26 +333,25 @@
     shudzState.pinyinHasBeenAdded = false;
   },
 
-  reapplyPinyinWithCurrentSegmentation() {
+  reapplyPinyinWithCurrentSegmentation(): void {
     Overlay.clearExistingPinyin();
     Overlay.queueNodesForProcessing(document.body);
   },
 
-  mergeAdjacentTextNodes(rootNode) {
+  mergeAdjacentTextNodes(rootNode: Node | null): void {
     if (!rootNode) return;
 
     const walker = document.createTreeWalker(
       rootNode,
       NodeFilter.SHOW_TEXT,
-      null,
-      false
+      null
     );
 
     let node = walker.nextNode();
     while (node) {
       let next = node.nextSibling;
       while (next && next.nodeType === Node.TEXT_NODE) {
-        node.nodeValue += next.nodeValue;
+        node.nodeValue = (node.nodeValue || "") + (next.nodeValue || "");
         const toRemove = next;
         next = next.nextSibling;
         if (toRemove.parentNode) {
@@ -355,7 +362,7 @@
     }
   },
 
-  updateSegmentationCssClass() {
+  updateSegmentationCssClass(): void {
     const body = document.body;
     if (!body) return;
     body.classList.remove("shudz-word-mode", "shudz-char-mode");
@@ -364,10 +371,7 @@
     );
   },
 
-  /**
-   * Determina se a fonte fornecida é serifada.
-   */
-  isFontSerif(fontString) {
+  isFontSerif(fontString: string): boolean {
     if (!fontString) return false;
 
     const lower = fontString.toLowerCase();
@@ -404,25 +408,26 @@
     return false;
   },
 
-  startObserver() {
+  startObserver(): void {
     if (shudzState.observer) return;
 
     shudzState.observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const elem = node as Element;
             if (
-              node.tagName === "RUBY" ||
-              node.tagName === "RT" ||
-              node.id === "shudz-tooltip" ||
-              node.closest?.("#shudz-tooltip")
+              elem.tagName === "RUBY" ||
+              elem.tagName === "RT" ||
+              elem.id === "shudz-tooltip" ||
+              elem.closest("#shudz-tooltip")
             ) {
               return;
             }
-            Overlay.queueNodesForProcessing(node);
-          } else if (node.nodeType === 3) {
+            Overlay.queueNodesForProcessing(elem);
+          } else if (node.nodeType === Node.TEXT_NODE) {
             if (
-              Overlay.containsChinese(node.nodeValue) &&
+              Overlay.containsChinese(node.nodeValue || "") &&
               node.parentNode &&
               !node.parentElement?.closest("#shudz-tooltip")
             ) {
@@ -439,28 +444,18 @@
     });
   },
 
-  containsChinese(text) {
+  containsChinese(text: string): boolean {
     if (!text) return false;
     return /[\u4e00-\u9fff]/.test(text);
   },
 
-  convertToPinyin(text) {
-    try {
-      if (typeof pinyinPro === "undefined") return "";
-      const raw = pinyinPro.pinyin(text, { toneType: "mark" });
-      if (!raw) return "";
-      if (text && text.length > 1) {
-        return String(raw).replace(/\s+/g, "");
-      }
-      return raw;
-    } catch (e) {
-      return "";
-    }
+  convertToPinyin(text: string): string {
+    return convertToPinyin(text);
   },
 
-  getChineseWordSegmenter() {
+  getChineseWordSegmenter(): Intl.Segmenter | null {
     if (!shudzState.useSmartSegmentation) {
-      return null; // força fallback caractere-a-caractere
+      return null;
     }
     try {
       if (!window.Intl || !Intl.Segmenter) return null;
@@ -470,20 +465,21 @@
         });
       }
       return shudzState.chineseWordSegmenter;
-    } catch (e) {
+    } catch {
       return null;
     }
   },
 
-  detectPageLanguage() {
-    const text = document.body.innerText.slice(0, TEXT_SAMPLE_LENGTH);
+  detectPageLanguage(): boolean {
+    const text = (document.body.innerText || "").slice(0, TEXT_SAMPLE_LENGTH);
     return (text.match(/[\u4e00-\u9fa5]/g) || []).length > LANGUAGE_MIN_CHARS;
   },
 
-  handleTextSelection(event) {
+  handleTextSelection(): void {
     if (!shudzState.masterEnabled || !shudzState.dictionaryEnabled) return;
     setTimeout(() => {
       const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
       const rawText = selection.toString().trim();
       const text = Dictionary.normalizeChineseSelection(rawText);
       if (
@@ -491,38 +487,33 @@
         Overlay.containsChinese(text) &&
         text.length <= SELECTION_MAX_LENGTH
       ) {
-        Dictionary.fetchDefinition(text, selection.getRangeAt(0));
+        void Dictionary.fetchDefinition(text, selection.getRangeAt(0));
       }
     }, 10);
   },
+
+  runAutoDetectOnce(): void {
+    setTimeout(() => {
+      if (!shudzState.masterEnabled || !shudzState.useAutoDetect) return;
+      if (Overlay.detectPageLanguage()) {
+        shudzState.useSmartSegmentation = true;
+        shudzState.dictionaryEnabled = true;
+        Overlay.updateSegmentationCssClass();
+        Overlay.enable();
+        chrome.storage.local.set({
+          [shudzState.domainKey]: true,
+          [SHUDZ_KEYS.SEGMENTATION]: true,
+          [SHUDZ_KEYS.DICTIONARY]: true,
+        });
+      }
+    }, 2000);
+  },
 };
 
-Overlay.runAutoDetectOnce = function () {
-  // Função auxiliar fora do objeto literal para poder ser reutilizada
-  // tanto na inicialização quanto quando o master é reativado.
-  setTimeout(() => {
-    if (!shudzState.masterEnabled || !shudzState.useAutoDetect) return;
-    if (Overlay.detectPageLanguage()) {
-      // Auto-activate sempre usa word segmentation e liga o dicionário
-      shudzState.useSmartSegmentation = true;
-      shudzState.dictionaryEnabled = true;
-      Overlay.updateSegmentationCssClass();
-      Overlay.enable();
-      chrome.storage.local.set({
-        [shudzState.domainKey]: true,
-        useSmartSegmentation: true,
-        useDictionary: true,
-      });
-    }
-  }, 2000);
-};
-
-// Facade para inicialização e interface principal
 const ShudzApp = {
-  start() {
+  start(): void {
     Overlay.init();
   },
 };
 
-// Ponto de entrada único
 ShudzApp.start();

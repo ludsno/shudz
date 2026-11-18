@@ -1,34 +1,68 @@
+import {
+  DEFAULT_CACHE_CONFIG,
+  SHUDZ_KEYS,
+  normalizeTheme,
+} from "../shared/storage";
+import type {
+  CacheConfig,
+  CachedEntry,
+  SavedWord,
+  ShudzMessage,
+  ThemeMode,
+} from "../shared/types";
+
+interface NormalizedIndex {
+  src: string;
+  norm: string;
+  ranges: Array<[number, number]>;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  const SAVED_WORDS_KEY = SHUDZ_KEYS.SAVED_WORDS;
-  const CACHE_CONFIG_KEY = SHUDZ_KEYS.CACHE_CONFIG;
-  const DICT_CACHE_KEY = SHUDZ_KEYS.DICT_CACHE;
-  const THEME_KEY = SHUDZ_KEYS.THEME;
+  const tabWords = document.getElementById("tabWords") as HTMLButtonElement;
+  const tabCache = document.getElementById("tabCache") as HTMLButtonElement;
+  const panelWords = document.getElementById("panelWords") as HTMLElement;
+  const panelCache = document.getElementById("panelCache") as HTMLElement;
 
-  const tabWords = document.getElementById("tabWords");
-  const tabCache = document.getElementById("tabCache");
-  const panelWords = document.getElementById("panelWords");
-  const panelCache = document.getElementById("panelCache");
+  const savedCountEl = document.getElementById("savedCount") as HTMLElement;
+  const searchInput = document.getElementById("searchInput") as HTMLInputElement;
+  const wordList = document.getElementById("wordList") as HTMLElement;
+  const exportJsonBtn = document.getElementById(
+    "exportJsonBtn"
+  ) as HTMLButtonElement;
+  const exportCsvBtn = document.getElementById(
+    "exportCsvBtn"
+  ) as HTMLButtonElement;
+  const exportTsvBtn = document.getElementById(
+    "exportTsvBtn"
+  ) as HTMLButtonElement;
+  const clearWordsBtn = document.getElementById(
+    "clearWordsBtn"
+  ) as HTMLButtonElement;
 
-  const savedCountEl = document.getElementById("savedCount");
-  const searchInput = document.getElementById("searchInput");
-  const wordList = document.getElementById("wordList");
-  const exportJsonBtn = document.getElementById("exportJsonBtn");
-  const exportCsvBtn = document.getElementById("exportCsvBtn");
-  const exportTsvBtn = document.getElementById("exportTsvBtn");
-  const clearWordsBtn = document.getElementById("clearWordsBtn");
+  const cacheEnabledToggle = document.getElementById(
+    "cacheEnabledToggle"
+  ) as HTMLInputElement;
+  const cacheMaxSelect = document.getElementById(
+    "cacheMaxSelect"
+  ) as HTMLSelectElement;
+  const cacheTtlSelect = document.getElementById(
+    "cacheTtlSelect"
+  ) as HTMLSelectElement;
+  const cacheUsageText = document.getElementById(
+    "cacheUsageText"
+  ) as HTMLElement;
+  const clearCacheBtn = document.getElementById(
+    "clearCacheBtn"
+  ) as HTMLButtonElement;
+  const resetAllBtn = document.getElementById(
+    "resetAllBtn"
+  ) as HTMLButtonElement | null;
 
-  const cacheEnabledToggle = document.getElementById("cacheEnabledToggle");
-  const cacheMaxSelect = document.getElementById("cacheMaxSelect");
-  const cacheTtlSelect = document.getElementById("cacheTtlSelect");
-  const cacheUsageText = document.getElementById("cacheUsageText");
-  const clearCacheBtn = document.getElementById("clearCacheBtn");
-  const resetAllBtn = document.getElementById("resetAllBtn");
+  let savedWordsMap: Record<string, SavedWord> = {};
+  let cacheConfig: CacheConfig = { ...DEFAULT_CACHE_CONFIG };
+  let dictCacheMap: Record<string, CachedEntry> = {};
 
-  let savedWordsMap = {};
-  let cacheConfig = { ...DEFAULT_CACHE_CONFIG };
-  let dictCacheMap = {};
-
-  function switchTab(target) {
+  function switchTab(target: "words" | "cache"): void {
     const isWords = target === "words";
     tabWords.setAttribute("aria-selected", String(isWords));
     tabCache.setAttribute("aria-selected", String(!isWords));
@@ -39,29 +73,37 @@ document.addEventListener("DOMContentLoaded", () => {
   tabWords.addEventListener("click", () => switchTab("words"));
   tabCache.addEventListener("click", () => switchTab("cache"));
 
-  function applyTheme(theme) {
-    document.documentElement.dataset.theme = normalizeTheme(theme);
+  function applyTheme(theme: unknown): void {
+    const normalized: ThemeMode = normalizeTheme(theme);
+    document.documentElement.dataset.theme = normalized;
   }
 
-  function loadAll() {
+  function loadAll(): void {
     chrome.storage.local.get(
-      [SAVED_WORDS_KEY, CACHE_CONFIG_KEY, DICT_CACHE_KEY, THEME_KEY],
+      [
+        SHUDZ_KEYS.SAVED_WORDS,
+        SHUDZ_KEYS.CACHE_CONFIG,
+        SHUDZ_KEYS.DICT_CACHE,
+        SHUDZ_KEYS.THEME,
+      ],
       (result) => {
-        applyTheme(result[THEME_KEY] || "auto");
+        applyTheme(result[SHUDZ_KEYS.THEME]);
         savedWordsMap =
-          result[SAVED_WORDS_KEY] && typeof result[SAVED_WORDS_KEY] === "object"
-            ? result[SAVED_WORDS_KEY]
+          result[SHUDZ_KEYS.SAVED_WORDS] &&
+          typeof result[SHUDZ_KEYS.SAVED_WORDS] === "object"
+            ? (result[SHUDZ_KEYS.SAVED_WORDS] as Record<string, SavedWord>)
             : {};
         cacheConfig = {
           ...DEFAULT_CACHE_CONFIG,
-          ...(result[CACHE_CONFIG_KEY] &&
-          typeof result[CACHE_CONFIG_KEY] === "object"
-            ? result[CACHE_CONFIG_KEY]
+          ...(result[SHUDZ_KEYS.CACHE_CONFIG] &&
+          typeof result[SHUDZ_KEYS.CACHE_CONFIG] === "object"
+            ? (result[SHUDZ_KEYS.CACHE_CONFIG] as Partial<CacheConfig>)
             : {}),
         };
         dictCacheMap =
-          result[DICT_CACHE_KEY] && typeof result[DICT_CACHE_KEY] === "object"
-            ? result[DICT_CACHE_KEY]
+          result[SHUDZ_KEYS.DICT_CACHE] &&
+          typeof result[SHUDZ_KEYS.DICT_CACHE] === "object"
+            ? (result[SHUDZ_KEYS.DICT_CACHE] as Record<string, CachedEntry>)
             : {};
 
         renderSavedWords();
@@ -70,24 +112,27 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  function normalizeForSearch(value) {
+  function normalizeForSearch(value: unknown): string {
     return String(value || "")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase();
   }
 
-  function normalizePinyinForSearch(value) {
+  function normalizePinyinForSearch(value: unknown): string {
     return normalizeForSearch(value).replace(/\s+/g, "");
   }
 
-  function buildNormalizedIndex(text, { isPinyin = false } = {}) {
+  function buildNormalizedIndex(
+    text: string,
+    { isPinyin = false }: { isPinyin?: boolean } = {}
+  ): NormalizedIndex {
     const src = String(text || "");
     let norm = "";
-    const ranges = [];
+    const ranges: Array<[number, number]> = [];
 
     for (let i = 0; i < src.length; ) {
-      const cp = src.codePointAt(i);
+      const cp = src.codePointAt(i) ?? 0;
       const charLen = cp > 0xffff ? 2 : 1;
       const ch = src.slice(i, i + charLen);
       let piece = ch
@@ -109,22 +154,27 @@ document.addEventListener("DOMContentLoaded", () => {
     return { src, norm, ranges };
   }
 
-  function appendHighlightedText(container, text, rawQuery, options = {}) {
+  function appendHighlightedText(
+    container: Node,
+    text: string,
+    rawQuery: string,
+    options: { isPinyin?: boolean } = {}
+  ): void {
     const str = String(text || "");
     const q = (rawQuery || "").trim();
     if (!q) {
-      container.textContent = str;
+      container.appendChild(document.createTextNode(str));
       return;
     }
 
     const normQuery = buildNormalizedIndex(q, options).norm;
     if (!normQuery) {
-      container.textContent = str;
+      container.appendChild(document.createTextNode(str));
       return;
     }
 
     const { src, norm, ranges } = buildNormalizedIndex(str, options);
-    const matches = [];
+    const matches: Array<[number, number]> = [];
     let pos = 0;
 
     while (pos <= norm.length - normQuery.length) {
@@ -137,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (matches.length === 0) {
-      container.textContent = str;
+      container.appendChild(document.createTextNode(str));
       return;
     }
 
@@ -158,13 +208,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function htmlToPlainText(html) {
+  function htmlToPlainText(html?: string): string {
     if (!html) return "";
     const doc = new DOMParser().parseFromString(String(html), "text/html");
     return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  function appendRichContent(container, html, fallbackText, rawQuery) {
+  function appendRichContent(
+    container: Node,
+    html: string | undefined,
+    fallbackText: string | undefined,
+    rawQuery: string
+  ): void {
     if (!html) {
       appendHighlightedText(container, fallbackText || "", rawQuery);
       return;
@@ -182,19 +237,20 @@ document.addEventListener("DOMContentLoaded", () => {
       "SUP",
     ]);
 
-    function importSafe(node) {
+    function importSafe(node: ChildNode): Node | null {
       if (node.nodeType === Node.TEXT_NODE) {
-        const span = document.createDocumentFragment();
-        appendHighlightedText(span, node.textContent || "", rawQuery);
-        return span;
+        const frag = document.createDocumentFragment();
+        appendHighlightedText(frag, node.textContent || "", rawQuery);
+        return frag;
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return null;
 
-      const tag = node.tagName;
+      const elem = node as Element;
+      const tag = elem.tagName;
       if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK") return null;
 
       const frag = document.createDocumentFragment();
-      node.childNodes.forEach((child) => {
+      elem.childNodes.forEach((child) => {
         const imported = importSafe(child);
         if (imported) frag.appendChild(imported);
       });
@@ -202,11 +258,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!allowedTags.has(tag)) return frag;
 
       const el = document.createElement(tag.toLowerCase());
-      const style = node.getAttribute("style");
+      const style = elem.getAttribute("style");
       if (style) el.setAttribute("style", style);
-      const cls = node.getAttribute("class");
+      const cls = elem.getAttribute("class");
       if (cls) el.setAttribute("class", cls);
-      const lang = node.getAttribute("lang");
+      const lang = elem.getAttribute("lang");
       if (lang) el.setAttribute("lang", lang);
       el.appendChild(frag);
       return el;
@@ -218,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function getFilteredWords() {
+  function getFilteredWords(): SavedWord[] {
     const rawQuery = searchInput.value.trim();
     const entries = Object.values(savedWordsMap).reverse();
     if (!rawQuery) return entries;
@@ -250,7 +306,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function renderSavedWords() {
+  function renderSavedWords(): void {
     const allCount = Object.keys(savedWordsMap).length;
     savedCountEl.textContent = String(allCount);
 
@@ -268,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
       empty.className = "card empty-state";
       empty.textContent =
         allCount === 0
-          ? "No saved words yet. Click ☆ in the dictionary tooltip to save words here."
+          ? "No saved words yet. Click the bookmark icon in the dictionary tooltip to save words here."
           : "No saved words match your search.";
       wordList.appendChild(empty);
       return;
@@ -321,7 +377,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const updated = { ...savedWordsMap };
         delete updated[item.word];
         savedWordsMap = updated;
-        chrome.storage.local.set({ [SAVED_WORDS_KEY]: updated }, () => {
+        chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: updated }, () => {
           renderSavedWords();
         });
       });
@@ -397,7 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function renderCacheSettings() {
+  function renderCacheSettings(): void {
     cacheEnabledToggle.checked = cacheConfig.enabled !== false;
     cacheMaxSelect.value = String(cacheConfig.maxEntries || 200);
     cacheTtlSelect.value = String(cacheConfig.ttlDays || 7);
@@ -409,10 +465,21 @@ document.addEventListener("DOMContentLoaded", () => {
     clearCacheBtn.disabled = count === 0;
   }
 
-  function saveCacheConfig(nextConfig) {
+  function saveCacheConfig(nextConfig: CacheConfig): void {
     cacheConfig = nextConfig;
-    chrome.storage.local.set({ [CACHE_CONFIG_KEY]: cacheConfig }, () => {
+    chrome.storage.local.set({ [SHUDZ_KEYS.CACHE_CONFIG]: cacheConfig }, () => {
       renderCacheSettings();
+    });
+  }
+
+  function broadcastToTabs(message: ShudzMessage): void {
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach((t) => {
+        if (!t.id) return;
+        chrome.tabs.sendMessage(t.id, message, () => {
+          void chrome.runtime.lastError;
+        });
+      });
     });
   }
 
@@ -435,18 +502,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   clearCacheBtn.addEventListener("click", () => {
-    chrome.storage.local.remove(DICT_CACHE_KEY, () => {
+    chrome.storage.local.remove(SHUDZ_KEYS.DICT_CACHE, () => {
       dictCacheMap = {};
       renderCacheSettings();
-      chrome.tabs.query({}, (tabs) => {
-        tabs.forEach((t) => {
-          if (t.id) {
-            chrome.tabs.sendMessage(t.id, { type: "clearDictionaryCache" }, () => {
-              void chrome.runtime.lastError;
-            });
-          }
-        });
-      });
+      broadcastToTabs({ type: "clearDictionaryCache" });
     });
   });
 
@@ -467,22 +526,8 @@ document.addEventListener("DOMContentLoaded", () => {
         applyTheme("auto");
         renderSavedWords();
         renderCacheSettings();
-
-        chrome.tabs.query({}, (tabs) => {
-          tabs.forEach((t) => {
-            if (!t.id) return;
-            chrome.tabs.sendMessage(
-              t.id,
-              { type: "clearDictionaryCache" },
-              () => void chrome.runtime.lastError
-            );
-            chrome.tabs.sendMessage(
-              t.id,
-              { type: "setTheme", value: "auto" },
-              () => void chrome.runtime.lastError
-            );
-          });
-        });
+        broadcastToTabs({ type: "clearDictionaryCache" });
+        broadcastToTabs({ type: "setTheme", value: "auto" });
       });
     });
   }
@@ -494,12 +539,12 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     savedWordsMap = {};
-    chrome.storage.local.set({ [SAVED_WORDS_KEY]: {} }, () => {
+    chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: {} }, () => {
       renderSavedWords();
     });
   });
 
-  function downloadFile(filename, content, mimeType) {
+  function downloadFile(filename: string, content: string, mimeType: string): void {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -511,7 +556,7 @@ document.addEventListener("DOMContentLoaded", () => {
     URL.revokeObjectURL(url);
   }
 
-  function formatFlatDefinitions(item) {
+  function formatFlatDefinitions(item: SavedWord): string {
     const defs = Array.isArray(item.definitions) ? item.definitions : [];
     return defs
       .map((d) => {
@@ -534,7 +579,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   exportCsvBtn.addEventListener("click", () => {
     const items = getFilteredWords();
-    const escapeCsv = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
+    const escapeCsv = (val: string) =>
+      `"${String(val ?? "").replace(/"/g, '""')}"`;
     const rows = [
       ["word", "traditional", "pinyin", "definitions"].join(","),
       ...items.map((item) =>
@@ -555,7 +601,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   exportTsvBtn.addEventListener("click", () => {
     const items = getFilteredWords();
-    const cleanCell = (val) =>
+    const cleanCell = (val: string) =>
       String(val ?? "")
         .replace(/[\t\r\n]+/g, " ")
         .trim();
@@ -575,23 +621,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
-    if (changes[SAVED_WORDS_KEY]) {
-      savedWordsMap = changes[SAVED_WORDS_KEY].newValue || {};
+    if (changes[SHUDZ_KEYS.SAVED_WORDS]) {
+      savedWordsMap =
+        (changes[SHUDZ_KEYS.SAVED_WORDS].newValue as Record<string, SavedWord>) ||
+        {};
       renderSavedWords();
     }
-    if (changes[DICT_CACHE_KEY]) {
-      dictCacheMap = changes[DICT_CACHE_KEY].newValue || {};
+    if (changes[SHUDZ_KEYS.DICT_CACHE]) {
+      dictCacheMap =
+        (changes[SHUDZ_KEYS.DICT_CACHE].newValue as Record<
+          string,
+          CachedEntry
+        >) || {};
       renderCacheSettings();
     }
-    if (changes[CACHE_CONFIG_KEY]) {
+    if (changes[SHUDZ_KEYS.CACHE_CONFIG]) {
       cacheConfig = {
         ...DEFAULT_CACHE_CONFIG,
-        ...(changes[CACHE_CONFIG_KEY].newValue || {}),
+        ...((changes[SHUDZ_KEYS.CACHE_CONFIG].newValue as Partial<CacheConfig>) ||
+          {}),
       };
       renderCacheSettings();
     }
-    if (changes[THEME_KEY]) {
-      applyTheme(changes[THEME_KEY].newValue || "auto");
+    if (changes[SHUDZ_KEYS.THEME]) {
+      applyTheme(changes[SHUDZ_KEYS.THEME].newValue);
     }
   });
 

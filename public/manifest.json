@@ -19,10 +19,6 @@
       "matches": ["<all_urls>"],
       "js": [
         "lib/pinyin-lib.js",
-        "shared/storage.js",
-        "content/state.js",
-        "content/tooltip.js",
-        "content/dictionary.js",
         "content/content.js"
       ],
       "css": ["content/styles.css"]

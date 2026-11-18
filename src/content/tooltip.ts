@@ -1,12 +1,26 @@
-const Tooltip = {
-  async ensureTemplateLoaded() {
+import {
+  TOOLTIP_MAX_WIDTH,
+  TOOLTIP_OFFSET_Y,
+  TOOLTIP_SAFE_MARGIN,
+  shudzState,
+} from "./state";
+
+export interface TooltipSaveOptions {
+  isSaved: boolean;
+  onToggleSave: () => Promise<boolean>;
+}
+
+export const Tooltip = {
+  async ensureTemplateLoaded(): Promise<void> {
     if (shudzState.tooltipTemplateElement) return;
     try {
       const url = chrome.runtime.getURL("content/tooltip-template.html");
       const html = await (await fetch(url)).text();
       const container = document.createElement("div");
       container.innerHTML = html.trim();
-      const template = container.querySelector("#shudz-tooltip-template");
+      const template = container.querySelector(
+        "#shudz-tooltip-template"
+      ) as HTMLTemplateElement | null;
       if (template && template.content) {
         shudzState.tooltipTemplateElement = template;
       } else {
@@ -17,7 +31,12 @@ const Tooltip = {
     }
   },
 
-  show(title, contentNode, range, saveOptions = null) {
+  show(
+    title: string,
+    contentNode: Node,
+    range: Range,
+    saveOptions: TooltipSaveOptions | null = null
+  ): void {
     Tooltip.remove();
     const tooltip = Tooltip.createTooltipElement(
       title,
@@ -34,13 +53,16 @@ const Tooltip = {
     }, 100);
   },
 
-  createTooltipElement(title, contentNode, saveOptions = null) {
-    let tooltip;
-    if (shudzState.tooltipTemplateElement) {
-      tooltip =
-        shudzState.tooltipTemplateElement.content.firstElementChild.cloneNode(
-          true
-        );
+  createTooltipElement(
+    title: string,
+    contentNode: Node,
+    saveOptions: TooltipSaveOptions | null = null
+  ): HTMLElement {
+    let tooltip: HTMLElement;
+    const templateChild =
+      shudzState.tooltipTemplateElement?.content.firstElementChild;
+    if (templateChild) {
+      tooltip = templateChild.cloneNode(true) as HTMLElement;
     } else {
       tooltip = document.createElement("div");
       tooltip.id = "shudz-tooltip";
@@ -67,7 +89,7 @@ const Tooltip = {
       wordSpan.textContent = title;
     }
 
-    const saveBtn = tooltip.querySelector(".save-btn");
+    const saveBtn = tooltip.querySelector(".save-btn") as HTMLButtonElement | null;
     if (saveBtn && saveOptions && typeof saveOptions.onToggleSave === "function") {
       saveBtn.hidden = false;
       Tooltip.updateSaveButtonState(saveBtn, Boolean(saveOptions.isSaved));
@@ -93,7 +115,7 @@ const Tooltip = {
     return tooltip;
   },
 
-  updateSaveButtonState(btn, isSaved) {
+  updateSaveButtonState(btn: HTMLButtonElement, isSaved: boolean): void {
     btn.classList.toggle("is-saved", isSaved);
     btn.setAttribute("aria-pressed", String(isSaved));
     const svg = btn.querySelector("svg");
@@ -105,7 +127,7 @@ const Tooltip = {
     btn.setAttribute("title", label);
   },
 
-  attachTooltipCloseBehavior(tooltip) {
+  attachTooltipCloseBehavior(tooltip: HTMLElement): void {
     const closeBtn = tooltip.querySelector(".close-btn");
     if (closeBtn) {
       closeBtn.addEventListener("click", () => {
@@ -114,7 +136,7 @@ const Tooltip = {
     }
   },
 
-  positionTooltip(tooltip, range) {
+  positionTooltip(tooltip: HTMLElement, range: Range): void {
     const rect = range.getBoundingClientRect();
     const scrollX = window.scrollX || window.pageXOffset;
     const scrollY = window.scrollY || window.pageYOffset;
@@ -127,7 +149,7 @@ const Tooltip = {
     tooltip.style.left = `${left}px`;
   },
 
-  getBackgroundLuminance(el) {
+  getBackgroundLuminance(el: Element | null): number | null {
     if (!el) return null;
     const color = window.getComputedStyle(el).backgroundColor;
     const match =
@@ -142,7 +164,7 @@ const Tooltip = {
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   },
 
-  isPageDark() {
+  isPageDark(): boolean {
     if (shudzState.theme === "dark") return true;
     if (shudzState.theme === "light") return false;
 
@@ -157,12 +179,12 @@ const Tooltip = {
         window.matchMedia &&
         window.matchMedia("(prefers-color-scheme: dark)").matches
       );
-    } catch (e) {
+    } catch {
       return false;
     }
   },
 
-  remove() {
+  remove(): void {
     if (shudzState.currentTooltip) {
       shudzState.currentTooltip.remove();
       shudzState.currentTooltip = null;
@@ -171,15 +193,16 @@ const Tooltip = {
     }
   },
 
-  closeOnEscape(e) {
+  closeOnEscape(e: KeyboardEvent): void {
     if (e.key === "Escape") {
       Tooltip.remove();
     }
   },
 
-  closeOnClickOutside(e) {
+  closeOnClickOutside(e: MouseEvent): void {
     if (
       shudzState.currentTooltip &&
+      e.target instanceof Node &&
       !shudzState.currentTooltip.contains(e.target)
     ) {
       Tooltip.remove();

@@ -1,14 +1,32 @@
+import { SHUDZ_KEYS, normalizeTheme } from "../shared/storage";
+import type { PinyinStateResponse, ShudzMessage, ThemeMode } from "../shared/types";
+
 document.addEventListener("DOMContentLoaded", async () => {
-  const masterToggle = document.getElementById("masterToggle");
-  const secondaryControls = document.getElementById("secondaryControls");
-  const toggleCheckbox = document.getElementById("pinyinToggle");
-  const segmentationToggle = document.getElementById("segmentationToggle");
-  const dictionaryToggle = document.getElementById("dictionaryToggle");
-  const autoDetectToggle = document.getElementById("autoDetectToggle");
+  const masterToggle = document.getElementById(
+    "masterToggle"
+  ) as HTMLInputElement;
+  const secondaryControls = document.getElementById(
+    "secondaryControls"
+  ) as HTMLElement;
+  const toggleCheckbox = document.getElementById(
+    "pinyinToggle"
+  ) as HTMLInputElement;
+  const segmentationToggle = document.getElementById(
+    "segmentationToggle"
+  ) as HTMLInputElement;
+  const dictionaryToggle = document.getElementById(
+    "dictionaryToggle"
+  ) as HTMLInputElement;
+  const autoDetectToggle = document.getElementById(
+    "autoDetectToggle"
+  ) as HTMLInputElement;
   const tabNotice = document.getElementById("tabNotice");
   const versionText = document.getElementById("versionText");
-  const themeButtons = document.querySelectorAll("[data-theme-value]");
-  const clearCacheBtn = document.getElementById("clearCacheBtn");
+  const themeButtons =
+    document.querySelectorAll<HTMLButtonElement>("[data-theme-value]");
+  const clearCacheBtn = document.getElementById(
+    "clearCacheBtn"
+  ) as HTMLButtonElement | null;
   const openLibraryBtn = document.getElementById("openLibraryBtn");
 
   if (openLibraryBtn) {
@@ -35,22 +53,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     tabNotice.classList.add("is-visible");
   }
 
-  const domainKey = isSupportedTab
-    ? "pinyin_state_" + new URL(tab.url).hostname
-    : null;
-  const segmentationKey = SHUDZ_KEYS.SEGMENTATION;
-  const autoDetectKey = SHUDZ_KEYS.AUTO_DETECT;
-  const dictionaryKey = SHUDZ_KEYS.DICTIONARY;
-  const masterKey = SHUDZ_KEYS.MASTER_ENABLED;
-  const themeKey = SHUDZ_KEYS.THEME;
-  const dictCacheKey = SHUDZ_KEYS.DICT_CACHE;
+  const domainKey =
+    isSupportedTab && tab?.url
+      ? "pinyin_state_" + new URL(tab.url).hostname
+      : null;
 
-  const keysToLoad = [
-    segmentationKey,
-    autoDetectKey,
-    dictionaryKey,
-    masterKey,
-    themeKey,
+  const keysToLoad: string[] = [
+    SHUDZ_KEYS.SEGMENTATION,
+    SHUDZ_KEYS.AUTO_DETECT,
+    SHUDZ_KEYS.DICTIONARY,
+    SHUDZ_KEYS.MASTER_ENABLED,
+    SHUDZ_KEYS.THEME,
   ];
   if (domainKey) {
     keysToLoad.push(domainKey);
@@ -59,7 +72,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   chrome.storage.local.get(keysToLoad, (result) => {
     if (domainKey) {
       toggleCheckbox.checked = result[domainKey] === true;
-      sendToTab({ type: "getPinyinState" }, (response) => {
+      sendToTab<PinyinStateResponse>({ type: "getPinyinState" }, (response) => {
         if (response && typeof response.enabled === "boolean") {
           toggleCheckbox.checked = response.enabled;
         }
@@ -70,26 +83,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     segmentationToggle.checked =
-      typeof result[segmentationKey] === "boolean"
-        ? result[segmentationKey]
+      typeof result[SHUDZ_KEYS.SEGMENTATION] === "boolean"
+        ? result[SHUDZ_KEYS.SEGMENTATION]
         : true;
 
     autoDetectToggle.checked =
-      typeof result[autoDetectKey] === "boolean"
-        ? result[autoDetectKey]
+      typeof result[SHUDZ_KEYS.AUTO_DETECT] === "boolean"
+        ? result[SHUDZ_KEYS.AUTO_DETECT]
         : true;
 
     dictionaryToggle.checked =
-      typeof result[dictionaryKey] === "boolean"
-        ? result[dictionaryKey]
+      typeof result[SHUDZ_KEYS.DICTIONARY] === "boolean"
+        ? result[SHUDZ_KEYS.DICTIONARY]
         : true;
 
     const masterEnabled =
-      typeof result[masterKey] === "boolean" ? result[masterKey] : true;
+      typeof result[SHUDZ_KEYS.MASTER_ENABLED] === "boolean"
+        ? result[SHUDZ_KEYS.MASTER_ENABLED]
+        : true;
     masterToggle.checked = masterEnabled;
     updateSecondaryState(masterEnabled);
 
-    applyTheme(normalizeTheme(result[themeKey]));
+    applyTheme(normalizeTheme(result[SHUDZ_KEYS.THEME]));
   });
 
   toggleCheckbox.addEventListener("change", () => {
@@ -102,38 +117,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   masterToggle.addEventListener("change", () => {
     const enabled = masterToggle.checked;
     updateSecondaryState(enabled);
-    chrome.storage.local.set({ [masterKey]: enabled });
+    chrome.storage.local.set({ [SHUDZ_KEYS.MASTER_ENABLED]: enabled });
     sendToTab({ type: "setMasterEnabled", value: enabled });
   });
 
   segmentationToggle.addEventListener("change", () => {
     const useSmartSegmentation = segmentationToggle.checked;
-    chrome.storage.local.set({ [segmentationKey]: useSmartSegmentation });
+    chrome.storage.local.set({
+      [SHUDZ_KEYS.SEGMENTATION]: useSmartSegmentation,
+    });
     sendToTab({ type: "setSegmentation", value: useSmartSegmentation });
   });
 
   autoDetectToggle.addEventListener("change", () => {
-    chrome.storage.local.set({ [autoDetectKey]: autoDetectToggle.checked });
+    chrome.storage.local.set({
+      [SHUDZ_KEYS.AUTO_DETECT]: autoDetectToggle.checked,
+    });
   });
 
   dictionaryToggle.addEventListener("change", () => {
     const useDictionary = dictionaryToggle.checked;
-    chrome.storage.local.set({ [dictionaryKey]: useDictionary });
+    chrome.storage.local.set({ [SHUDZ_KEYS.DICTIONARY]: useDictionary });
     sendToTab({ type: "setDictionaryEnabled", value: useDictionary });
   });
 
   themeButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      const theme = btn.dataset.themeValue || "auto";
+      const theme: ThemeMode = normalizeTheme(btn.dataset.themeValue);
       applyTheme(theme);
-      chrome.storage.local.set({ [themeKey]: theme });
+      chrome.storage.local.set({ [SHUDZ_KEYS.THEME]: theme });
       sendToTab({ type: "setTheme", value: theme });
     });
   });
 
   if (clearCacheBtn) {
     clearCacheBtn.addEventListener("click", () => {
-      chrome.storage.local.remove(dictCacheKey, () => {
+      chrome.storage.local.remove(SHUDZ_KEYS.DICT_CACHE, () => {
         sendToTab({ type: "clearDictionaryCache" });
         clearCacheBtn.textContent = "Cleared";
         setTimeout(() => {
@@ -143,7 +162,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function applyTheme(theme) {
+  function applyTheme(theme: ThemeMode): void {
     document.documentElement.dataset.theme = theme;
     themeButtons.forEach((btn) => {
       btn.setAttribute(
@@ -153,7 +172,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function updateSecondaryState(isOn) {
+  function updateSecondaryState(isOn: boolean): void {
     secondaryControls.classList.toggle("is-disabled", !isOn);
     toggleCheckbox.disabled = !isOn || !isSupportedTab;
     segmentationToggle.disabled = !isOn;
@@ -161,9 +180,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     autoDetectToggle.disabled = !isOn;
   }
 
-  function sendToTab(message, callback) {
-    if (!isSupportedTab) return;
-    chrome.tabs.sendMessage(tab.id, message, (response) => {
+  function sendToTab<T = unknown>(
+    message: ShudzMessage,
+    callback?: (response: T) => void
+  ): void {
+    if (!isSupportedTab || !tab?.id) return;
+    chrome.tabs.sendMessage(tab.id, message, (response: T) => {
       if (chrome.runtime.lastError) return;
       if (callback) callback(response);
     });
