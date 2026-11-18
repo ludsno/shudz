@@ -38,12 +38,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const domainKey = isSupportedTab
     ? "pinyin_state_" + new URL(tab.url).hostname
     : null;
-  const segmentationKey = "useSmartSegmentation";
-  const autoDetectKey = "useAutoDetect";
-  const dictionaryKey = "useDictionary";
-  const masterKey = "shudz_masterEnabled";
-  const themeKey = "shudz_theme";
-  const dictCacheKey = "shudz_dictCache";
+  const segmentationKey = SHUDZ_KEYS.SEGMENTATION;
+  const autoDetectKey = SHUDZ_KEYS.AUTO_DETECT;
+  const dictionaryKey = SHUDZ_KEYS.DICTIONARY;
+  const masterKey = SHUDZ_KEYS.MASTER_ENABLED;
+  const themeKey = SHUDZ_KEYS.THEME;
+  const dictCacheKey = SHUDZ_KEYS.DICT_CACHE;
 
   const keysToLoad = [
     segmentationKey,
@@ -51,7 +51,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     dictionaryKey,
     masterKey,
     themeKey,
-    dictCacheKey,
   ];
   if (domainKey) {
     keysToLoad.push(domainKey);
@@ -90,20 +89,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     masterToggle.checked = masterEnabled;
     updateSecondaryState(masterEnabled);
 
-    const savedTheme =
-      result[themeKey] === "light" ||
-      result[themeKey] === "dark" ||
-      result[themeKey] === "auto"
-        ? result[themeKey]
-        : "auto";
-    applyTheme(savedTheme);
-
-    const cacheObj = result[dictCacheKey];
-    const cacheCount =
-      cacheObj && typeof cacheObj === "object"
-        ? Object.keys(cacheObj).length
-        : 0;
-    updateCacheButton(cacheCount);
+    applyTheme(normalizeTheme(result[themeKey]));
   });
 
   toggleCheckbox.addEventListener("change", () => {
@@ -148,16 +134,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (clearCacheBtn) {
     clearCacheBtn.addEventListener("click", () => {
       chrome.storage.local.remove(dictCacheKey, () => {
-        updateCacheButton(0);
         sendToTab({ type: "clearDictionaryCache" });
+        clearCacheBtn.textContent = "Cleared";
+        setTimeout(() => {
+          clearCacheBtn.textContent = "Clear";
+        }, 1200);
       });
     });
-  }
-
-  function updateCacheButton(count) {
-    if (!clearCacheBtn) return;
-    clearCacheBtn.textContent = `Clear (${count})`;
-    clearCacheBtn.disabled = count === 0;
   }
 
   function applyTheme(theme) {

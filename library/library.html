@@ -4,55 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shudz — Saved Words &amp; Settings</title>
+    <link rel="stylesheet" href="../shared/theme.css" />
     <style>
       :root {
-        color-scheme: light dark;
         --bg: #f8f9fa;
-        --surface: #ffffff;
-        --text: #1f1f1f;
-        --text-muted: #5f6368;
-        --border: rgba(0, 0, 0, 0.12);
-        --hover: rgba(0, 0, 0, 0.04);
-        --accent: #0b57d0;
-        --accent-soft: rgba(11, 87, 208, 0.08);
-        --danger: #c5221f;
-        --switch-bg: #8e918f;
-        --switch-knob: #ffffff;
       }
 
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) {
           --bg: #17171a;
-          --surface: #202124;
-          --text: #e8eaed;
-          --text-muted: #9aa0a6;
-          --border: rgba(255, 255, 255, 0.12);
-          --hover: rgba(255, 255, 255, 0.06);
-          --accent: #8ab4f8;
-          --accent-soft: rgba(138, 180, 248, 0.12);
-          --danger: #f28b82;
-          --switch-bg: #5f6368;
-          --switch-knob: #202124;
         }
       }
 
       :root[data-theme="dark"] {
-        color-scheme: dark;
         --bg: #17171a;
-        --surface: #202124;
-        --text: #e8eaed;
-        --text-muted: #9aa0a6;
-        --border: rgba(255, 255, 255, 0.12);
-        --hover: rgba(255, 255, 255, 0.06);
-        --accent: #8ab4f8;
-        --accent-soft: rgba(138, 180, 248, 0.12);
-        --danger: #f28b82;
-        --switch-bg: #5f6368;
-        --switch-knob: #202124;
-      }
-
-      :root[data-theme="light"] {
-        color-scheme: light;
       }
 
       * {
@@ -160,7 +125,20 @@
       }
 
       .btn:hover:not(:disabled) {
-        background-color: var(--hover);
+        background-color: var(--row-hover);
+      }
+
+      .search-highlight {
+        background-color: var(--highlight-bg);
+        color: inherit;
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+
+      .word-preview span[style*="background"],
+      .def-item span[style*="background"] {
+        border-radius: 4px;
+        padding: 1px 4px;
       }
 
       .btn:disabled {
@@ -331,43 +309,13 @@
       }
 
       .switch {
-        position: relative;
-        display: inline-block;
-        flex-shrink: 0;
         width: 36px;
         height: 20px;
       }
 
-      .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-        margin: 0;
-      }
-
-      .slider {
-        position: absolute;
-        inset: 0;
-        background-color: var(--switch-bg);
-        border-radius: 999px;
-        cursor: pointer;
-        transition: background-color 0.18s ease;
-      }
-
       .slider::before {
-        content: "";
-        position: absolute;
         height: 16px;
         width: 16px;
-        left: 2px;
-        top: 2px;
-        background-color: var(--switch-knob);
-        border-radius: 50%;
-        transition: transform 0.18s ease;
-      }
-
-      input:checked + .slider {
-        background-color: var(--accent);
       }
 
       input:checked + .slider::before {
@@ -489,6 +437,7 @@
       </section>
     </div>
 
+    <script src="../shared/storage.js"></script>
     <script src="library.js"></script>
   </body>
 </html>

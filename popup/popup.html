@@ -2,57 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="stylesheet" href="../shared/theme.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #ffffff;
-        --text: #1f1f1f;
-        --text-muted: #5f6368;
-        --border: rgba(0, 0, 0, 0.1);
-        --row-hover: rgba(0, 0, 0, 0.04);
-        --switch-bg: #8e918f;
-        --switch-knob: #ffffff;
-        --accent: #0b57d0;
-        --seg-bg: rgba(0, 0, 0, 0.06);
-        --seg-active: #ffffff;
-        --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) {
-          --bg: #202124;
-          --text: #e8eaed;
-          --text-muted: #9aa0a6;
-          --border: rgba(255, 255, 255, 0.12);
-          --row-hover: rgba(255, 255, 255, 0.06);
-          --switch-bg: #5f6368;
-          --switch-knob: #202124;
-          --accent: #8ab4f8;
-          --seg-bg: rgba(255, 255, 255, 0.08);
-          --seg-active: #35363a;
-          --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-        }
-      }
-
-      :root[data-theme="dark"] {
-        color-scheme: dark;
-        --bg: #202124;
-        --text: #e8eaed;
-        --text-muted: #9aa0a6;
-        --border: rgba(255, 255, 255, 0.12);
-        --row-hover: rgba(255, 255, 255, 0.06);
-        --switch-bg: #5f6368;
-        --switch-knob: #202124;
-        --accent: #8ab4f8;
-        --seg-bg: rgba(255, 255, 255, 0.08);
-        --seg-active: #35363a;
-        --seg-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-      }
-
-      :root[data-theme="light"] {
-        color-scheme: light;
-      }
-
       * {
         box-sizing: border-box;
       }
@@ -145,55 +96,6 @@
       .secondary-controls.is-disabled {
         opacity: 0.45;
         pointer-events: none;
-      }
-
-      .switch {
-        position: relative;
-        display: inline-block;
-        flex-shrink: 0;
-        width: 32px;
-        height: 18px;
-      }
-
-      .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-        margin: 0;
-      }
-
-      .slider {
-        position: absolute;
-        inset: 0;
-        background-color: var(--switch-bg);
-        border-radius: 999px;
-        transition: background-color 0.18s ease;
-      }
-
-      .slider::before {
-        content: "";
-        position: absolute;
-        height: 14px;
-        width: 14px;
-        left: 2px;
-        top: 2px;
-        background-color: var(--switch-knob);
-        border-radius: 50%;
-        transition: transform 0.18s ease;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-      }
-
-      input:checked + .slider {
-        background-color: var(--accent);
-      }
-
-      input:checked + .slider::before {
-        transform: translateX(14px);
-      }
-
-      input:focus-visible + .slider {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
       }
 
       .segmented {
@@ -355,8 +257,8 @@
 
     <div class="setting-row static-row">
       <span class="setting-label">Dictionary cache</span>
-      <button type="button" class="action-btn" id="clearCacheBtn" disabled>
-        Clear (0)
+      <button type="button" class="action-btn" id="clearCacheBtn">
+        Clear
       </button>
     </div>
 
@@ -372,6 +274,7 @@
       </a>
     </footer>
 
+    <script src="../shared/storage.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

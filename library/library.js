@@ -1,13 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const SAVED_WORDS_KEY = "shudz_savedWords";
-  const CACHE_CONFIG_KEY = "shudz_cacheConfig";
-  const DICT_CACHE_KEY = "shudz_dictCache";
-  const THEME_KEY = "shudz_theme";
-  const DEFAULT_CACHE_CONFIG = {
-    enabled: true,
-    maxEntries: 200,
-    ttlDays: 7,
-  };
+  const SAVED_WORDS_KEY = SHUDZ_KEYS.SAVED_WORDS;
+  const CACHE_CONFIG_KEY = SHUDZ_KEYS.CACHE_CONFIG;
+  const DICT_CACHE_KEY = SHUDZ_KEYS.DICT_CACHE;
+  const THEME_KEY = SHUDZ_KEYS.THEME;
 
   const tabWords = document.getElementById("tabWords");
   const tabCache = document.getElementById("tabCache");
@@ -44,10 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
   tabCache.addEventListener("click", () => switchTab("cache"));
 
   function applyTheme(theme) {
-    document.documentElement.dataset.theme =
-      theme === "light" || theme === "dark" || theme === "auto"
-        ? theme
-        : "auto";
+    document.documentElement.dataset.theme = normalizeTheme(theme);
   }
 
   function loadAll() {
@@ -77,19 +69,183 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
+  function normalizeForSearch(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  }
+
+  function normalizePinyinForSearch(value) {
+    return normalizeForSearch(value).replace(/\s+/g, "");
+  }
+
+  function buildNormalizedIndex(text, { isPinyin = false } = {}) {
+    const src = String(text || "");
+    let norm = "";
+    const ranges = [];
+
+    for (let i = 0; i < src.length; ) {
+      const cp = src.codePointAt(i);
+      const charLen = cp > 0xffff ? 2 : 1;
+      const ch = src.slice(i, i + charLen);
+      let piece = ch
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
+      if (isPinyin) {
+        piece = piece.replace(/\s+/g, "").replace(/v/g, "u");
+      }
+
+      for (let j = 0; j < piece.length; j++) {
+        norm += piece[j];
+        ranges.push([i, i + charLen]);
+      }
+      i += charLen;
+    }
+
+    return { src, norm, ranges };
+  }
+
+  function appendHighlightedText(container, text, rawQuery, options = {}) {
+    const str = String(text || "");
+    const q = (rawQuery || "").trim();
+    if (!q) {
+      container.textContent = str;
+      return;
+    }
+
+    const normQuery = buildNormalizedIndex(q, options).norm;
+    if (!normQuery) {
+      container.textContent = str;
+      return;
+    }
+
+    const { src, norm, ranges } = buildNormalizedIndex(str, options);
+    const matches = [];
+    let pos = 0;
+
+    while (pos <= norm.length - normQuery.length) {
+      const idx = norm.indexOf(normQuery, pos);
+      if (idx === -1) break;
+      const start = ranges[idx][0];
+      const end = ranges[idx + normQuery.length - 1][1];
+      matches.push([start, end]);
+      pos = idx + normQuery.length;
+    }
+
+    if (matches.length === 0) {
+      container.textContent = str;
+      return;
+    }
+
+    let cursor = 0;
+    matches.forEach(([start, end]) => {
+      if (start > cursor) {
+        container.appendChild(document.createTextNode(src.slice(cursor, start)));
+      }
+      const mark = document.createElement("mark");
+      mark.className = "search-highlight";
+      mark.textContent = src.slice(start, end);
+      container.appendChild(mark);
+      cursor = end;
+    });
+
+    if (cursor < src.length) {
+      container.appendChild(document.createTextNode(src.slice(cursor)));
+    }
+  }
+
+  function htmlToPlainText(html) {
+    if (!html) return "";
+    const doc = new DOMParser().parseFromString(String(html), "text/html");
+    return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
+  function appendRichContent(container, html, fallbackText, rawQuery) {
+    if (!html) {
+      appendHighlightedText(container, fallbackText || "", rawQuery);
+      return;
+    }
+
+    const doc = new DOMParser().parseFromString(String(html), "text/html");
+    const allowedTags = new Set([
+      "SPAN",
+      "B",
+      "I",
+      "STRONG",
+      "EM",
+      "SMALL",
+      "SUB",
+      "SUP",
+    ]);
+
+    function importSafe(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const span = document.createDocumentFragment();
+        appendHighlightedText(span, node.textContent || "", rawQuery);
+        return span;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+      const tag = node.tagName;
+      if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK") return null;
+
+      const frag = document.createDocumentFragment();
+      node.childNodes.forEach((child) => {
+        const imported = importSafe(child);
+        if (imported) frag.appendChild(imported);
+      });
+
+      if (!allowedTags.has(tag)) return frag;
+
+      const el = document.createElement(tag.toLowerCase());
+      const style = node.getAttribute("style");
+      if (style) el.setAttribute("style", style);
+      const cls = node.getAttribute("class");
+      if (cls) el.setAttribute("class", cls);
+      const lang = node.getAttribute("lang");
+      if (lang) el.setAttribute("lang", lang);
+      el.appendChild(frag);
+      return el;
+    }
+
+    doc.body.childNodes.forEach((child) => {
+      const imported = importSafe(child);
+      if (imported) container.appendChild(imported);
+    });
+  }
+
   function getFilteredWords() {
-    const query = searchInput.value.trim().toLowerCase();
-    const entries = Object.values(savedWordsMap).sort(
-      (a, b) => (b.savedAt || 0) - (a.savedAt || 0)
-    );
-    if (!query) return entries;
+    const rawQuery = searchInput.value.trim();
+    const entries = Object.values(savedWordsMap).reverse();
+    if (!rawQuery) return entries;
+
+    const query = normalizeForSearch(rawQuery);
+    const pinyinQuery = normalizePinyinForSearch(rawQuery).replace(/v/g, "u");
 
     return entries.filter((item) => {
-      if ((item.word || "").toLowerCase().includes(query)) return true;
-      if ((item.resolvedTerm || "").toLowerCase().includes(query)) return true;
-      if ((item.pinyin || "").toLowerCase().includes(query)) return true;
+      if (normalizeForSearch(item.word).includes(query)) return true;
+      if (normalizeForSearch(item.resolvedTerm).includes(query)) return true;
+
+      const normPinyin = normalizePinyinForSearch(item.pinyin).replace(
+        /v/g,
+        "u"
+      );
+      if (normPinyin.includes(pinyinQuery)) return true;
+
       const defs = Array.isArray(item.definitions) ? item.definitions : [];
-      return defs.some((d) => (d.text || "").toLowerCase().includes(query));
+      return defs.some((d) => {
+        const defText = d.text || htmlToPlainText(d.html);
+        if (normalizeForSearch(defText).includes(query)) return true;
+        return (
+          Array.isArray(d.examples) &&
+          d.examples.some((ex) =>
+            normalizeForSearch(htmlToPlainText(ex)).includes(query)
+          )
+        );
+      });
     });
   }
 
@@ -117,6 +273,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const rawQuery = searchInput.value.trim();
+
     filtered.forEach((item) => {
       const card = document.createElement("div");
       card.className = "card word-card";
@@ -129,20 +287,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const hanzi = document.createElement("span");
       hanzi.className = "word-hanzi";
-      hanzi.textContent = item.word;
+      appendHighlightedText(hanzi, item.word, rawQuery);
       main.appendChild(hanzi);
 
       if (item.resolvedTerm && item.resolvedTerm !== item.word) {
         const trad = document.createElement("span");
         trad.className = "word-trad";
-        trad.textContent = `(${item.resolvedTerm})`;
+        appendHighlightedText(trad, `(${item.resolvedTerm})`, rawQuery);
         main.appendChild(trad);
       }
 
       if (item.pinyin) {
         const pinyin = document.createElement("span");
         pinyin.className = "word-pinyin";
-        pinyin.textContent = item.pinyin;
+        appendHighlightedText(pinyin, item.pinyin, rawQuery, { isPinyin: true });
         main.appendChild(pinyin);
       }
 
@@ -174,10 +332,10 @@ document.addEventListener("DOMContentLoaded", () => {
       card.appendChild(row);
 
       const defs = Array.isArray(item.definitions) ? item.definitions : [];
-      if (defs[0]?.text) {
+      if (defs[0]?.html || defs[0]?.text) {
         const preview = document.createElement("div");
         preview.className = "word-preview";
-        preview.textContent = defs[0].text;
+        appendRichContent(preview, defs[0].html, defs[0].text, rawQuery);
         card.appendChild(preview);
       }
 
@@ -197,7 +355,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const textSpan = document.createElement("span");
-        textSpan.textContent = def.text || "";
+        appendRichContent(textSpan, def.html, def.text || "", rawQuery);
         defItem.appendChild(textSpan);
 
         if (Array.isArray(def.examples) && def.examples.length > 0) {
@@ -205,7 +363,7 @@ document.addEventListener("DOMContentLoaded", () => {
           exBox.className = "def-examples";
           def.examples.forEach((ex) => {
             const p = document.createElement("div");
-            p.textContent = ex;
+            appendRichContent(p, ex, ex, rawQuery);
             exBox.appendChild(p);
           });
           defItem.appendChild(exBox);
@@ -216,12 +374,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const metaFooter = document.createElement("div");
       metaFooter.className = "word-meta-footer";
-
-      const savedDate = document.createElement("span");
-      savedDate.textContent = item.savedAt
-        ? `Saved ${new Date(item.savedAt).toLocaleDateString()}`
-        : "";
-      metaFooter.appendChild(savedDate);
 
       const wikiLink = document.createElement("a");
       const target = item.resolvedTerm || item.word;
@@ -326,7 +478,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return defs
       .map((d) => {
         const prefix = d.partOfSpeech ? `[${d.partOfSpeech}] ` : "";
-        return `${prefix}${d.text || ""}`.trim();
+        const body = d.text || htmlToPlainText(d.html);
+        return `${prefix}${body}`.trim();
       })
       .filter(Boolean)
       .join("; ");
@@ -345,16 +498,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const items = getFilteredWords();
     const escapeCsv = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
     const rows = [
-      ["word", "traditional", "pinyin", "definitions", "savedAt"].join(","),
+      ["word", "traditional", "pinyin", "definitions"].join(","),
       ...items.map((item) =>
         [
           escapeCsv(item.word),
           escapeCsv(item.resolvedTerm || ""),
           escapeCsv(item.pinyin || ""),
           escapeCsv(formatFlatDefinitions(item)),
-          escapeCsv(
-            item.savedAt ? new Date(item.savedAt).toISOString() : ""
-          ),
         ].join(",")
       ),
     ];

@@ -3,21 +3,21 @@
     chrome.storage.local.get(
       [
         shudzState.domainKey,
-        "useSmartSegmentation",
-        "useAutoDetect",
-        "useDictionary",
-        "shudz_masterEnabled",
-        "shudz_theme",
-        CACHE_CONFIG_KEY,
+        SHUDZ_KEYS.SEGMENTATION,
+        SHUDZ_KEYS.AUTO_DETECT,
+        SHUDZ_KEYS.DICTIONARY,
+        SHUDZ_KEYS.MASTER_ENABLED,
+        SHUDZ_KEYS.THEME,
+        SHUDZ_KEYS.CACHE_CONFIG,
       ],
       (result) => {
         const savedState = result[shudzState.domainKey];
-        const savedSeg = result.useSmartSegmentation;
-        const savedAuto = result.useAutoDetect;
-        const savedDict = result.useDictionary;
-        const savedMaster = result.shudz_masterEnabled;
-        const savedTheme = result.shudz_theme;
-        const savedCacheConfig = result[CACHE_CONFIG_KEY];
+        const savedSeg = result[SHUDZ_KEYS.SEGMENTATION];
+        const savedAuto = result[SHUDZ_KEYS.AUTO_DETECT];
+        const savedDict = result[SHUDZ_KEYS.DICTIONARY];
+        const savedMaster = result[SHUDZ_KEYS.MASTER_ENABLED];
+        const savedTheme = result[SHUDZ_KEYS.THEME];
+        const savedCacheConfig = result[SHUDZ_KEYS.CACHE_CONFIG];
 
         if (typeof savedSeg === "boolean") {
           shudzState.useSmartSegmentation = savedSeg;
@@ -31,8 +31,8 @@
         if (typeof savedMaster === "boolean") {
           shudzState.masterEnabled = savedMaster;
         }
-        if (savedTheme === "light" || savedTheme === "dark" || savedTheme === "auto") {
-          shudzState.theme = savedTheme;
+        if (savedTheme) {
+          shudzState.theme = normalizeTheme(savedTheme);
         }
         if (savedCacheConfig && typeof savedCacheConfig === "object") {
           shudzState.cacheConfig = {
@@ -130,28 +130,28 @@
 
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== "local") return;
-      if (changes[CACHE_CONFIG_KEY]?.newValue) {
+      if (changes[SHUDZ_KEYS.CACHE_CONFIG]?.newValue) {
         shudzState.cacheConfig = {
           ...DEFAULT_CACHE_CONFIG,
-          ...changes[CACHE_CONFIG_KEY].newValue,
+          ...changes[SHUDZ_KEYS.CACHE_CONFIG].newValue,
         };
         if (!shudzState.cacheConfig.enabled) {
           Dictionary.clearCache();
         }
       }
-      if (changes[DICT_CACHE_KEY] && !changes[DICT_CACHE_KEY].newValue) {
+      if (
+        changes[SHUDZ_KEYS.DICT_CACHE] &&
+        !changes[SHUDZ_KEYS.DICT_CACHE].newValue
+      ) {
         Dictionary.clearCache();
       }
-      if (changes.shudz_theme?.newValue) {
-        const nextTheme = changes.shudz_theme.newValue;
-        if (nextTheme === "light" || nextTheme === "dark" || nextTheme === "auto") {
-          shudzState.theme = nextTheme;
-          if (shudzState.currentTooltip) {
-            shudzState.currentTooltip.classList.toggle(
-              "shudz-dark",
-              Tooltip.isPageDark()
-            );
-          }
+      if (changes[SHUDZ_KEYS.THEME]?.newValue) {
+        shudzState.theme = normalizeTheme(changes[SHUDZ_KEYS.THEME].newValue);
+        if (shudzState.currentTooltip) {
+          shudzState.currentTooltip.classList.toggle(
+            "shudz-dark",
+            Tooltip.isPageDark()
+          );
         }
       }
     });
@@ -258,19 +258,7 @@
         const segments = segmenter.segment(text);
         for (const { segment, isWordLike } of segments) {
           if (isWordLike && Overlay.containsChinese(segment)) {
-            const ruby = document.createElement("ruby");
-            ruby.textContent = segment;
-
-            ruby.classList.add("shudz-word");
-            ruby.dataset.shudz = "1";
-            ruby.dataset.segment = segment;
-
-            const rt = document.createElement("rt");
-            rt.textContent = Overlay.convertToPinyin(segment);
-            rt.className = fontClass;
-
-            ruby.appendChild(rt);
-            fragment.appendChild(ruby);
+            fragment.appendChild(Overlay.createRubyNode(segment, fontClass));
           } else {
             fragment.appendChild(document.createTextNode(segment));
           }
@@ -278,19 +266,7 @@
       } else {
         for (const char of text) {
           if (Overlay.containsChinese(char)) {
-            const ruby = document.createElement("ruby");
-            ruby.textContent = char;
-
-            ruby.classList.add("shudz-word");
-            ruby.dataset.shudz = "1";
-            ruby.dataset.segment = char;
-
-            const rt = document.createElement("rt");
-            rt.textContent = Overlay.convertToPinyin(char);
-            rt.className = fontClass;
-
-            ruby.appendChild(rt);
-            fragment.appendChild(ruby);
+            fragment.appendChild(Overlay.createRubyNode(char, fontClass));
           } else {
             fragment.appendChild(document.createTextNode(char));
           }
@@ -307,6 +283,21 @@
     } else {
       setTimeout(Overlay.processQueueBatch, 10);
     }
+  },
+
+  createRubyNode(segment, fontClass) {
+    const ruby = document.createElement("ruby");
+    ruby.textContent = segment;
+    ruby.classList.add("shudz-word");
+    ruby.dataset.shudz = "1";
+    ruby.dataset.segment = segment;
+
+    const rt = document.createElement("rt");
+    rt.textContent = Overlay.convertToPinyin(segment);
+    rt.className = fontClass;
+
+    ruby.appendChild(rt);
+    return ruby;
   },
 
   clearExistingPinyin() {
