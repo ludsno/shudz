@@ -50,7 +50,7 @@ const Tooltip = {
         <div class="shudz-header">
           <span class="word-text"></span>
           <div class="shudz-header-actions">
-            <button type="button" class="save-btn" aria-label="Save word" aria-pressed="false" title="Save word" hidden>☆</button>
+            <button type="button" class="save-btn" aria-label="Save word" aria-pressed="false" title="Save word" hidden><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>
             <button type="button" class="close-btn" aria-label="Close">✕</button>
           </div>
         </div>
@@ -94,9 +94,12 @@ const Tooltip = {
   },
 
   updateSaveButtonState(btn, isSaved) {
-    btn.textContent = isSaved ? "★" : "☆";
     btn.classList.toggle("is-saved", isSaved);
     btn.setAttribute("aria-pressed", String(isSaved));
+    const svg = btn.querySelector("svg");
+    if (svg) {
+      svg.setAttribute("fill", isSaved ? "currentColor" : "none");
+    }
     const label = isSaved ? "Remove from saved words" : "Save word";
     btn.setAttribute("aria-label", label);
     btn.setAttribute("title", label);

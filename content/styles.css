@@ -110,8 +110,10 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-#shudz-tooltip .save-btn {
-  font-size: 14px;
+#shudz-tooltip .save-btn svg {
+  display: block;
+  width: 14px;
+  height: 14px;
 }
 
 #shudz-tooltip .save-btn[hidden] {
