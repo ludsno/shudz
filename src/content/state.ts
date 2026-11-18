@@ -8,8 +8,8 @@ export const SELECTION_MAX_LENGTH = 20;
 export const MAX_DEFINITIONS = 8;
 export const MAX_EXAMPLES_PER_DEF = 2;
 export const TOOLTIP_OFFSET_Y = 10;
-export const TOOLTIP_MAX_WIDTH = 300;
-export const TOOLTIP_SAFE_MARGIN = 310;
+export const TOOLTIP_MAX_WIDTH = 380;
+export const TOOLTIP_SAFE_MARGIN = 392;
 export const WIKTIONARY_API_BASE =
   "https://en.wiktionary.org/api/rest_v1/page/definition/";
 export const WIKTIONARY_HTML_BASE =
