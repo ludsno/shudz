@@ -37,6 +37,7 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
 }
 
 #shudz-tooltip {
+  color-scheme: light;
   position: absolute;
   z-index: 2147483647;
   background: #ffffff;
@@ -112,14 +113,18 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   padding-right: 4px;
 }
 
+#shudz-tooltip rt {
+  display: none !important;
+}
+
 #shudz-tooltip ul {
-  padding-left: 16px;
+  padding-left: 0;
   margin: 0;
-  list-style-type: disc;
+  list-style: none;
 }
 
 #shudz-tooltip li {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 #shudz-tooltip li:last-child {
@@ -146,12 +151,26 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   margin-top: 2px;
 }
 
+#shudz-tooltip .def-text *,
+#shudz-tooltip .example-item * {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: inherit !important;
+}
+
+#shudz-tooltip .def-text a,
+#shudz-tooltip .example-item a {
+  text-decoration: none;
+  pointer-events: none;
+}
+
 #shudz-tooltip .def-text:not(:last-child) {
   margin-bottom: 2px;
 }
 
 #shudz-tooltip .example-list {
-  margin: 4px 0 0 0;
+  list-style: none;
+  margin: 5px 0 0 0;
   border-left: 2px solid rgba(0, 0, 0, 0.12);
   padding-left: 8px;
   font-size: 12px;
@@ -194,6 +213,7 @@ body.pinyin-visible.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
 }
 
 #shudz-tooltip.shudz-dark {
+  color-scheme: dark;
   background: #202124;
   color: #e8eaed;
   border-color: rgba(255, 255, 255, 0.14);

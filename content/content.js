@@ -175,7 +175,8 @@
         tag !== "INPUT" &&
         tag !== "RUBY" &&
         tag !== "RT" &&
-        !parent.isContentEditable
+        !parent.isContentEditable &&
+        !parent.closest("#shudz-tooltip")
       ) {
         shudzState.processingQueue.push(node);
       }
@@ -381,12 +382,22 @@
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) {
-            if (node.tagName === "RUBY" || node.tagName === "RT") return;
+            if (
+              node.tagName === "RUBY" ||
+              node.tagName === "RT" ||
+              node.id === "shudz-tooltip" ||
+              node.closest?.("#shudz-tooltip")
+            ) {
+              return;
+            }
             Overlay.queueNodesForProcessing(node);
           } else if (node.nodeType === 3) {
-            if (Overlay.containsChinese(node.nodeValue)) {
-              if (node.parentNode)
-                Overlay.queueNodesForProcessing(node.parentNode);
+            if (
+              Overlay.containsChinese(node.nodeValue) &&
+              node.parentNode &&
+              !node.parentElement?.closest("#shudz-tooltip")
+            ) {
+              Overlay.queueNodesForProcessing(node.parentNode);
             }
           }
         });

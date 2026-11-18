@@ -143,34 +143,28 @@ const Dictionary = {
 
         const definitionText = def.definition || "";
 
-        const examples = [];
-        if (Array.isArray(def.examples)) {
-          examples.push(...def.examples);
-        }
-        if (Array.isArray(def.parsedExamples)) {
-          def.parsedExamples.forEach((ex) => {
-            if (ex.example) {
-              if (ex.translation) {
-                examples.push(`${ex.example} — ${ex.translation}`);
-              } else {
-                examples.push(ex.example);
-              }
-            }
-          });
+        if (pos) {
+          const posSpan = document.createElement("span");
+          posSpan.className = "pos-tag";
+          posSpan.textContent = pos;
+          li.appendChild(posSpan);
+          li.appendChild(document.createTextNode(" "));
         }
 
-        if (examples.length > 0) {
-          const exampleList = document.createElement("ul");
-          exampleList.className = "example-list";
-          examples.slice(0, MAX_EXAMPLES_PER_DEF).forEach((ex) => {
-            const liEx = document.createElement("li");
-            liEx.className = "example-item";
-            // exemplos podem conter marcação HTML da API do Wiktionary
-            liEx.innerHTML = ex;
-            exampleList.appendChild(liEx);
-          });
-          li.appendChild(exampleList);
+        if (lang) {
+          const langSpan = document.createElement("span");
+          langSpan.className = "lang-tag";
+          langSpan.textContent = lang;
+          li.appendChild(langSpan);
+          li.appendChild(document.createTextNode(" "));
         }
+
+        const defDiv = document.createElement("div");
+        defDiv.className = "def-text";
+        // definitionText pode conter marcação HTML vinda da API do Wiktionary
+        // (links, itálicos, etc.), então usamos innerHTML aqui.
+        defDiv.innerHTML = definitionText;
+        li.appendChild(defDiv);
 
         const metaParts = [];
 
@@ -205,28 +199,38 @@ const Dictionary = {
           li.appendChild(metaDiv);
         }
 
-        if (pos) {
-          const posSpan = document.createElement("span");
-          posSpan.className = "pos-tag";
-          posSpan.textContent = pos;
-          li.appendChild(posSpan);
-          li.appendChild(document.createTextNode(" "));
+        const examples = [];
+        if (Array.isArray(def.examples)) {
+          examples.push(...def.examples);
+        }
+        if (Array.isArray(def.parsedExamples)) {
+          def.parsedExamples.forEach((ex) => {
+            if (ex.example) {
+              if (ex.translation) {
+                examples.push(`${ex.example} — ${ex.translation}`);
+              } else {
+                examples.push(ex.example);
+              }
+            }
+          });
         }
 
-        if (lang) {
-          const langSpan = document.createElement("span");
-          langSpan.className = "lang-tag";
-          langSpan.textContent = lang;
-          li.appendChild(langSpan);
-          li.appendChild(document.createTextNode(" "));
+        if (examples.length > 0) {
+          const exampleList = document.createElement("ul");
+          exampleList.className = "example-list";
+          examples.slice(0, MAX_EXAMPLES_PER_DEF).forEach((ex) => {
+            const liEx = document.createElement("li");
+            liEx.className = "example-item";
+            // exemplos podem conter marcação HTML da API do Wiktionary
+            liEx.innerHTML = ex;
+            if (liEx.textContent.trim()) {
+              exampleList.appendChild(liEx);
+            }
+          });
+          if (exampleList.children.length > 0) {
+            li.appendChild(exampleList);
+          }
         }
-
-        const defDiv = document.createElement("div");
-        defDiv.className = "def-text";
-        // definitionText pode conter marcação HTML vinda da API do Wiktionary
-        // (links, itálicos, etc.), então usamos innerHTML aqui.
-        defDiv.innerHTML = definitionText;
-        li.appendChild(defDiv);
 
         list.appendChild(li);
         count++;
