@@ -8,21 +8,27 @@
     "https://en.wiktionary.org/*" 
   ],
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup/popup.html",
     "default_icon": {
-      "16": "icon.png"
+      "16": "assets/icon.png"
     }
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["pinyin-lib.js", "state.js", "tooltip.js", "dictionary.js", "content.js"],
-      "css": ["styles.css"]
+      "js": [
+        "lib/pinyin-lib.js",
+        "content/state.js",
+        "content/tooltip.js",
+        "content/dictionary.js",
+        "content/content.js"
+      ],
+      "css": ["content/styles.css"]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["tooltip-template.html"],
+      "resources": ["content/tooltip-template.html"],
       "matches": ["<all_urls>"]
     }
   ]

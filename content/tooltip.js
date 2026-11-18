@@ -2,7 +2,7 @@ const Tooltip = {
   async ensureTemplateLoaded() {
     if (shudzState.tooltipTemplateElement) return;
     try {
-      const url = chrome.runtime.getURL("tooltip-template.html");
+      const url = chrome.runtime.getURL("content/tooltip-template.html");
       const html = await (await fetch(url)).text();
       const container = document.createElement("div");
       container.innerHTML = html.trim();
