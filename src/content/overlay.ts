@@ -509,11 +509,3 @@ export const Overlay = {
     }, 2000);
   },
 };
-
-const ShudzApp = {
-  start(): void {
-    Overlay.init();
-  },
-};
-
-ShudzApp.start();

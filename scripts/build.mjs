@@ -13,7 +13,7 @@ cpSync(publicDir, distDir, { recursive: true });
 
 const buildOptions = {
   entryPoints: {
-    "content/content": resolve(rootDir, "src/content/content.ts"),
+    "content/content": resolve(rootDir, "src/content/index.ts"),
     "popup/popup": resolve(rootDir, "src/popup/popup.ts"),
     "library/library": resolve(rootDir, "src/library/library.ts"),
   },
