@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["pinyin-lib.js", "content.js"],
+      "js": ["pinyin-lib.js", "state.js", "tooltip.js", "dictionary.js", "content.js"],
       "css": ["styles.css"]
     }
   ],
