@@ -1,10 +1,9 @@
 <template id="shudz-tooltip-template">
-  <div id="shudz-tooltip">
-    <h4>
+  <div id="shudz-tooltip" role="dialog" aria-label="Dictionary definition">
+    <div class="shudz-header">
       <span class="word-text"></span>
-      <span class="close-btn">✕</span>
-    </h4>
-    <div class="header-subtitle">Chinese dictionary · Wiktionary</div>
+      <button type="button" class="close-btn" aria-label="Close">✕</button>
+    </div>
     <div class="shudz-content"></div>
   </div>
 </template>

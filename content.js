@@ -62,15 +62,6 @@ const Overlay = {
           return;
         }
 
-        // Quando o auto-activate está ligado, ele tem precedência sobre o
-        // estado salvo por domínio: sempre tentamos detectar chinês e ligar
-        // automaticamente nesta página.
-        if (shudzState.useAutoDetect) {
-          Overlay.runAutoDetectOnce();
-          return;
-        }
-
-        // Auto-activate desligado: obedece apenas ao estado salvo por domínio.
         if (savedState === true) {
           if (document.readyState === "complete") {
             Overlay.enable();
@@ -78,25 +69,29 @@ const Overlay = {
             window.addEventListener("load", Overlay.enable);
           }
         } else if (savedState === false) {
-          // explicitamente desligado: não faz nada (permanece desativado)
           Overlay.disable();
+        } else if (shudzState.useAutoDetect) {
+          Overlay.runAutoDetectOnce();
         }
-        // Se não há estado salvo e auto-activate está desligado, deixamos
-        // o overlay desativado até o usuário ligá-lo manualmente no popup.
       }
     );
 
-    chrome.runtime.onMessage.addListener((request) => {
-      if (request.type === "togglePinyin") {
-        const isCurrentlyOn =
-          document.body.classList.contains("pinyin-visible");
-        if (isCurrentlyOn) {
-          Overlay.disable();
-          chrome.storage.local.set({ [shudzState.domainKey]: false });
-        } else {
+    chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+      if (request.type === "getPinyinState") {
+        sendResponse({
+          enabled: document.body.classList.contains("pinyin-visible"),
+        });
+      } else if (request.type === "togglePinyin" || request.type === "setPinyinEnabled") {
+        const shouldEnable =
+          typeof request.value === "boolean"
+            ? request.value
+            : !document.body.classList.contains("pinyin-visible");
+        if (shouldEnable) {
           Overlay.enable();
-          chrome.storage.local.set({ [shudzState.domainKey]: true });
+        } else {
+          Overlay.disable();
         }
+        chrome.storage.local.set({ [shudzState.domainKey]: shouldEnable });
       } else if (request.type === "setSegmentation") {
         const newValue = !!request.value;
         if (shudzState.useSmartSegmentation === newValue) {
@@ -797,6 +792,7 @@ const Tooltip = {
     document.body.appendChild(tooltip);
     shudzState.currentTooltip = tooltip;
     Tooltip.positionTooltip(tooltip, range);
+    document.addEventListener("keydown", Tooltip.closeOnEscape);
     setTimeout(() => {
       document.addEventListener("click", Tooltip.closeOnClickOutside);
     }, 100);
@@ -812,15 +808,13 @@ const Tooltip = {
     } else {
       tooltip = document.createElement("div");
       tooltip.id = "shudz-tooltip";
-      if (Tooltip.isPageDark()) {
-        tooltip.classList.add("shudz-dark");
-      }
+      tooltip.setAttribute("role", "dialog");
+      tooltip.setAttribute("aria-label", "Dictionary definition");
       tooltip.innerHTML = `
-        <h4>
+        <div class="shudz-header">
           <span class="word-text"></span>
-          <span class="close-btn">✕</span>
-        </h4>
-        <div class="header-subtitle">Chinese dictionary · Wiktionary</div>
+          <button type="button" class="close-btn" aria-label="Close">✕</button>
+        </div>
         <div class="shudz-content"></div>
       `;
     }
@@ -867,17 +861,33 @@ const Tooltip = {
     tooltip.style.left = `${left}px`;
   },
 
+  getBackgroundLuminance(el) {
+    if (!el) return null;
+    const color = window.getComputedStyle(el).backgroundColor;
+    const match =
+      color &&
+      color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/i);
+    if (!match) return null;
+    const alpha = match[4] !== undefined ? parseFloat(match[4]) : 1;
+    if (alpha === 0) return null;
+    const r = parseInt(match[1], 10);
+    const g = parseInt(match[2], 10);
+    const b = parseInt(match[3], 10);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  },
+
   isPageDark() {
     try {
-      const style = window.getComputedStyle(document.body);
-      const color = style.backgroundColor;
-      const match = color && color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-      if (!match) return false;
-      const r = parseInt(match[1], 10);
-      const g = parseInt(match[2], 10);
-      const b = parseInt(match[3], 10);
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance < 0.4;
+      const bodyLum = Tooltip.getBackgroundLuminance(document.body);
+      if (bodyLum !== null) return bodyLum < 0.4;
+
+      const rootLum = Tooltip.getBackgroundLuminance(document.documentElement);
+      if (rootLum !== null) return rootLum < 0.4;
+
+      return (
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches
+      );
     } catch (e) {
       return false;
     }
@@ -888,6 +898,13 @@ const Tooltip = {
       shudzState.currentTooltip.remove();
       shudzState.currentTooltip = null;
       document.removeEventListener("click", Tooltip.closeOnClickOutside);
+      document.removeEventListener("keydown", Tooltip.closeOnEscape);
+    }
+  },
+
+  closeOnEscape(e) {
+    if (e.key === "Escape") {
+      Tooltip.remove();
     }
   },
 
