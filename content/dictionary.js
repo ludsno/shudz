@@ -17,6 +17,17 @@ const Dictionary = {
   async fetchDefinition(word, range) {
     await Tooltip.ensureTemplateLoaded();
 
+    const cached = await Dictionary.getCachedEntry(word);
+    if (cached) {
+      Dictionary.renderDefinitions(
+        word,
+        cached.definitions,
+        cached.resolvedTerm || word,
+        range
+      );
+      return;
+    }
+
     const loading = Dictionary.createMessageNode("Loading definition...");
     Tooltip.show(word, loading, range);
 
@@ -27,6 +38,151 @@ const Dictionary = {
       Dictionary.showErrorTooltip(word, range);
       console.error(error);
     }
+  },
+
+  trimEntriesForCache(entries) {
+    const trimmed = [];
+    let count = 0;
+
+    for (const entry of entries) {
+      if (count >= MAX_DEFINITIONS) break;
+      const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
+      const keptDefs = [];
+
+      for (const def of defs) {
+        if (count >= MAX_DEFINITIONS) break;
+        const cleanDef = { definition: def.definition || "" };
+        if (Array.isArray(def.examples) && def.examples.length > 0) {
+          cleanDef.examples = def.examples.slice(0, MAX_EXAMPLES_PER_DEF);
+        }
+        if (Array.isArray(def.parsedExamples) && def.parsedExamples.length > 0) {
+          cleanDef.parsedExamples = def.parsedExamples.slice(
+            0,
+            MAX_EXAMPLES_PER_DEF
+          );
+        }
+        if (Array.isArray(def.tags) && def.tags.length > 0) {
+          cleanDef.tags = def.tags;
+        }
+        if (Array.isArray(def.glosses) && def.glosses.length > 0) {
+          cleanDef.glosses = def.glosses;
+        }
+        if (def.note) cleanDef.note = def.note;
+        if (def.senseid) cleanDef.senseid = def.senseid;
+        keptDefs.push(cleanDef);
+        count++;
+      }
+
+      if (keptDefs.length > 0) {
+        trimmed.push({
+          partOfSpeech: entry.partOfSpeech || "",
+          language: entry.language || "",
+          definitions: keptDefs,
+        });
+      }
+    }
+
+    return trimmed;
+  },
+
+  getCachedEntry(word) {
+    const memEntry = shudzState.dictionaryCache.get(word);
+    const now = Date.now();
+    if (memEntry && now - memEntry.cachedAt < DICT_CACHE_TTL_MS) {
+      return Promise.resolve(memEntry);
+    }
+    if (memEntry) {
+      shudzState.dictionaryCache.delete(word);
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([DICT_CACHE_KEY], (result) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          const cacheObj = result[DICT_CACHE_KEY];
+          const stored =
+            cacheObj && typeof cacheObj === "object" ? cacheObj[word] : null;
+          if (
+            stored &&
+            Array.isArray(stored.definitions) &&
+            stored.definitions.length > 0 &&
+            now - stored.cachedAt < DICT_CACHE_TTL_MS
+          ) {
+            shudzState.dictionaryCache.set(word, stored);
+            resolve(stored);
+          } else {
+            resolve(null);
+          }
+        });
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  },
+
+  setCachedEntry(word, definitions, resolvedTerm) {
+    if (!definitions || definitions.length === 0) return;
+
+    const payload = {
+      definitions: Dictionary.trimEntriesForCache(definitions),
+      resolvedTerm: resolvedTerm || word,
+      cachedAt: Date.now(),
+    };
+    if (payload.definitions.length === 0) return;
+
+    shudzState.dictionaryCache.set(word, payload);
+
+    try {
+      chrome.storage.local.get([DICT_CACHE_KEY], (result) => {
+        if (chrome.runtime.lastError) return;
+        const now = Date.now();
+        const cacheObj =
+          result[DICT_CACHE_KEY] && typeof result[DICT_CACHE_KEY] === "object"
+            ? { ...result[DICT_CACHE_KEY] }
+            : {};
+
+        for (const key of Object.keys(cacheObj)) {
+          const item = cacheObj[key];
+          if (!item || now - item.cachedAt >= DICT_CACHE_TTL_MS) {
+            delete cacheObj[key];
+          }
+        }
+
+        cacheObj[word] = payload;
+
+        const keys = Object.keys(cacheObj);
+        if (keys.length > DICT_CACHE_MAX_ENTRIES) {
+          keys.sort((a, b) => cacheObj[a].cachedAt - cacheObj[b].cachedAt);
+          const toRemove = keys.length - DICT_CACHE_MAX_ENTRIES;
+          for (let i = 0; i < toRemove; i++) {
+            delete cacheObj[keys[i]];
+          }
+        }
+
+        chrome.storage.local.set({ [DICT_CACHE_KEY]: cacheObj });
+      });
+    } catch (e) {}
+  },
+
+  clearCache() {
+    shudzState.dictionaryCache.clear();
+  },
+
+  renderDefinitions(word, chineseDefinitions, resolvedTerm, range) {
+    const fragment = document.createDocumentFragment();
+    const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
+    if (defsNode) {
+      fragment.appendChild(defsNode);
+    }
+    const note =
+      resolvedTerm !== word
+        ? `Showing traditional entry for ${resolvedTerm}.`
+        : null;
+    fragment.appendChild(Dictionary.buildWiktionaryLink(resolvedTerm, note));
+    Tooltip.show(word, fragment, range);
   },
 
   async fetchWiktionaryData(word) {
@@ -72,15 +228,14 @@ const Dictionary = {
     }
 
     if (chineseDefinitions && chineseDefinitions.length > 0) {
-      const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
-      if (defsNode) {
-        fragment.appendChild(defsNode);
-      }
-      const note =
-        resolvedTerm !== word
-          ? `Showing traditional entry for ${resolvedTerm}.`
-          : null;
-      fragment.appendChild(Dictionary.buildWiktionaryLink(resolvedTerm, note));
+      Dictionary.setCachedEntry(word, chineseDefinitions, resolvedTerm);
+      Dictionary.renderDefinitions(
+        word,
+        chineseDefinitions,
+        resolvedTerm,
+        range
+      );
+      return;
     } else if (!data) {
       fragment.appendChild(
         Dictionary.createMessageNode(

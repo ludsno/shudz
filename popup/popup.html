@@ -250,6 +250,34 @@
         color: var(--accent);
         text-decoration: underline;
       }
+
+      .action-btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 4px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.12s ease, opacity 0.12s ease;
+      }
+
+      .action-btn:hover:not(:disabled) {
+        background-color: var(--row-hover);
+      }
+
+      .action-btn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .action-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
     </style>
   </head>
   <body>
@@ -320,6 +348,13 @@
           Dark
         </button>
       </div>
+    </div>
+
+    <div class="setting-row static-row">
+      <span class="setting-label">Dictionary cache</span>
+      <button type="button" class="action-btn" id="clearCacheBtn" disabled>
+        Clear (0)
+      </button>
     </div>
 
     <footer class="popup-footer">

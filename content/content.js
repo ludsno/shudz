@@ -81,6 +81,8 @@
         }
       } else if (request.type === "setDictionaryEnabled") {
         shudzState.dictionaryEnabled = !!request.value;
+      } else if (request.type === "clearDictionaryCache") {
+        Dictionary.clearCache();
       } else if (request.type === "setTheme") {
         const theme = request.value;
         if (theme === "light" || theme === "dark" || theme === "auto") {

@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const tabNotice = document.getElementById("tabNotice");
   const versionText = document.getElementById("versionText");
   const themeButtons = document.querySelectorAll("[data-theme-value]");
+  const clearCacheBtn = document.getElementById("clearCacheBtn");
 
   const manifest = chrome.runtime.getManifest();
   if (versionText && manifest?.version) {
@@ -35,6 +36,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const dictionaryKey = "useDictionary";
   const masterKey = "shudz_masterEnabled";
   const themeKey = "shudz_theme";
+  const dictCacheKey = "shudz_dictCache";
 
   const keysToLoad = [
     segmentationKey,
@@ -42,6 +44,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     dictionaryKey,
     masterKey,
     themeKey,
+    dictCacheKey,
   ];
   if (domainKey) {
     keysToLoad.push(domainKey);
@@ -87,6 +90,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         ? result[themeKey]
         : "auto";
     applyTheme(savedTheme);
+
+    const cacheObj = result[dictCacheKey];
+    const cacheCount =
+      cacheObj && typeof cacheObj === "object"
+        ? Object.keys(cacheObj).length
+        : 0;
+    updateCacheButton(cacheCount);
   });
 
   toggleCheckbox.addEventListener("change", () => {
@@ -127,6 +137,21 @@ document.addEventListener("DOMContentLoaded", async () => {
       sendToTab({ type: "setTheme", value: theme });
     });
   });
+
+  if (clearCacheBtn) {
+    clearCacheBtn.addEventListener("click", () => {
+      chrome.storage.local.remove(dictCacheKey, () => {
+        updateCacheButton(0);
+        sendToTab({ type: "clearDictionaryCache" });
+      });
+    });
+  }
+
+  function updateCacheButton(count) {
+    if (!clearCacheBtn) return;
+    clearCacheBtn.textContent = `Clear (${count})`;
+    clearCacheBtn.disabled = count === 0;
+  }
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;

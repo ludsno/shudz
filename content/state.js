@@ -13,6 +13,9 @@ const WIKTIONARY_API_BASE =
 const WIKTIONARY_HTML_BASE =
   "https://en.wiktionary.org/api/rest_v1/page/html/";
 const WIKTIONARY_PAGE_BASE = "https://en.wiktionary.org/wiki/";
+const DICT_CACHE_KEY = "shudz_dictCache";
+const DICT_CACHE_MAX_ENTRIES = 200;
+const DICT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const shudzState = {
   pinyinHasBeenAdded: false,
@@ -23,6 +26,7 @@ const shudzState = {
   chineseWordSegmenter: null,
   currentTooltip: null,
   tooltipTemplateElement: null,
+  dictionaryCache: new Map(),
   useSmartSegmentation: true,
   useAutoDetect: true,
   dictionaryEnabled: true,
