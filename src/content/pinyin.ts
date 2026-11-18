@@ -11,3 +11,16 @@ export function convertToPinyin(text: string): string {
     return "";
   }
 }
+
+export function convertToPinyinArray(text: string): string[] | null {
+  try {
+    if (typeof pinyinPro === "undefined" || !text) return null;
+    const arr = pinyinPro.pinyin(text, { toneType: "mark", type: "array" });
+    if (Array.isArray(arr) && arr.length === text.length) {
+      return arr;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

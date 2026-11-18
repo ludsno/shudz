@@ -5,7 +5,7 @@ import {
 } from "../shared/storage";
 import type { CacheConfig, ShudzMessage } from "../shared/types";
 import { Dictionary } from "./dictionary";
-import { convertToPinyin } from "./pinyin";
+import { convertToPinyin, convertToPinyinArray } from "./pinyin";
 import {
   LANGUAGE_MIN_CHARS,
   PROCESS_BATCH_SIZE,
@@ -68,12 +68,32 @@ export const Overlay = {
           if (document.readyState === "complete") {
             Overlay.enable();
           } else {
-            window.addEventListener("load", Overlay.enable);
+            window.addEventListener("load", () => Overlay.enable());
           }
         } else if (savedState === false) {
-          Overlay.disable();
+          Overlay.disable(shudzState.useSmartSegmentation);
+          if (shudzState.useSmartSegmentation) {
+            if (document.readyState === "complete") {
+              Overlay.ensureAnnotated();
+            } else {
+              window.addEventListener("load", () => Overlay.ensureAnnotated());
+            }
+          }
         } else if (shudzState.useAutoDetect) {
           Overlay.runAutoDetectOnce();
+          if (shudzState.useSmartSegmentation) {
+            if (document.readyState === "complete") {
+              Overlay.ensureAnnotated();
+            } else {
+              window.addEventListener("load", () => Overlay.ensureAnnotated());
+            }
+          }
+        } else if (shudzState.useSmartSegmentation) {
+          if (document.readyState === "complete") {
+            Overlay.ensureAnnotated();
+          } else {
+            window.addEventListener("load", () => Overlay.ensureAnnotated());
+          }
         }
       }
     );
@@ -95,7 +115,7 @@ export const Overlay = {
           if (shouldEnable) {
             Overlay.enable();
           } else {
-            Overlay.disable();
+            Overlay.disable(shudzState.useSmartSegmentation);
           }
           chrome.storage.local.set({ [shudzState.domainKey]: shouldEnable });
         } else if (request.type === "setSegmentation") {
@@ -104,9 +124,16 @@ export const Overlay = {
             return;
           }
           shudzState.useSmartSegmentation = newValue;
-          Overlay.updateSegmentationCssClass();
-          if (document.body.classList.contains("pinyin-visible")) {
+          if (!shudzState.masterEnabled) return;
+
+          const isPinyinVisible =
+            document.body.classList.contains("pinyin-visible");
+          if (newValue || isPinyinVisible) {
+            Overlay.updateSegmentationCssClass();
             Overlay.reapplyPinyinWithCurrentSegmentation();
+            Overlay.startObserver();
+          } else {
+            Overlay.disable(false);
           }
         } else if (request.type === "setDictionaryEnabled") {
           shudzState.dictionaryEnabled = !!request.value;
@@ -135,9 +162,16 @@ export const Overlay = {
             if (state === true) {
               Overlay.enable();
             } else if (state === false) {
-              // keep disabled
+              if (shudzState.useSmartSegmentation) {
+                Overlay.ensureAnnotated();
+              }
             } else if (shudzState.useAutoDetect) {
               Overlay.runAutoDetectOnce();
+              if (shudzState.useSmartSegmentation) {
+                Overlay.ensureAnnotated();
+              }
+            } else if (shudzState.useSmartSegmentation) {
+              Overlay.ensureAnnotated();
             }
           });
         }
@@ -175,8 +209,7 @@ export const Overlay = {
     document.addEventListener("mouseup", Overlay.handleTextSelection);
   },
 
-  enable(): void {
-    document.body.classList.add("pinyin-visible");
+  ensureAnnotated(): void {
     Overlay.updateSegmentationCssClass();
 
     if (!shudzState.pinyinHasBeenAdded) {
@@ -187,8 +220,17 @@ export const Overlay = {
     Overlay.startObserver();
   },
 
-  disable(): void {
+  enable(): void {
+    document.body.classList.add("pinyin-visible");
+    Overlay.ensureAnnotated();
+  },
+
+  disable(keepSegmentation = false): void {
     document.body.classList.remove("pinyin-visible");
+    if (keepSegmentation) {
+      Overlay.updateSegmentationCssClass();
+      return;
+    }
     document.body.classList.remove("shudz-word-mode", "shudz-char-mode");
     if (shudzState.observer) {
       shudzState.observer.disconnect();
@@ -261,22 +303,37 @@ export const Overlay = {
 
       const fragment = document.createDocumentFragment();
       const text = textNode.nodeValue || "";
-
+      const pinyinArray = convertToPinyinArray(text);
       const segmenter = Overlay.getChineseWordSegmenter();
+      let offset = 0;
 
       if (segmenter) {
         const segments = segmenter.segment(text);
         for (const { segment, isWordLike } of segments) {
+          const pinyin = pinyinArray
+            ? pinyinArray.slice(offset, offset + segment.length).join("")
+            : convertToPinyin(segment);
+          offset += segment.length;
+
           if (isWordLike && Overlay.containsChinese(segment)) {
-            fragment.appendChild(Overlay.createRubyNode(segment, fontClass));
+            fragment.appendChild(
+              Overlay.createRubyNode(segment, fontClass, pinyin)
+            );
           } else {
             fragment.appendChild(document.createTextNode(segment));
           }
         }
       } else {
         for (const char of text) {
+          const pinyin = pinyinArray
+            ? pinyinArray.slice(offset, offset + char.length).join("")
+            : convertToPinyin(char);
+          offset += char.length;
+
           if (Overlay.containsChinese(char)) {
-            fragment.appendChild(Overlay.createRubyNode(char, fontClass));
+            fragment.appendChild(
+              Overlay.createRubyNode(char, fontClass, pinyin)
+            );
           } else {
             fragment.appendChild(document.createTextNode(char));
           }
@@ -295,7 +352,11 @@ export const Overlay = {
     }
   },
 
-  createRubyNode(segment: string, fontClass: string): HTMLElement {
+  createRubyNode(
+    segment: string,
+    fontClass: string,
+    pinyinText?: string
+  ): HTMLElement {
     const ruby = document.createElement("ruby");
     ruby.textContent = segment;
     ruby.classList.add("shudz-word");
@@ -303,7 +364,7 @@ export const Overlay = {
     ruby.dataset.segment = segment;
 
     const rt = document.createElement("rt");
-    rt.textContent = convertToPinyin(segment);
+    rt.textContent = pinyinText ?? convertToPinyin(segment);
     rt.className = fontClass;
 
     ruby.appendChild(rt);
