@@ -22,7 +22,7 @@ const Dictionary = {
 
     try {
       const data = await Dictionary.fetchWiktionaryData(word);
-      Dictionary.handleWiktionaryResponse(word, data, range);
+      await Dictionary.handleWiktionaryResponse(word, data, range);
     } catch (error) {
       Dictionary.showErrorTooltip(word, range);
       console.error(error);
@@ -40,10 +40,48 @@ const Dictionary = {
     return await response.json();
   },
 
-  handleWiktionaryResponse(word, data, range) {
+  async fetchWiktionaryHtml(word) {
+    const response = await fetch(
+      `${WIKTIONARY_HTML_BASE}${encodeURIComponent(word)}`
+    );
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return await response.text();
+  },
+
+  async handleWiktionaryResponse(word, data, range) {
     const fragment = document.createDocumentFragment();
 
-    if (!data) {
+    let chineseDefinitions = data
+      ? Dictionary.extractChineseDefinitions(data, { allowTranslingual: false })
+      : null;
+    let resolvedTerm = word;
+
+    if (!chineseDefinitions || chineseDefinitions.length === 0) {
+      const htmlFallback = await Dictionary.fetchChineseFromHtml(word);
+      if (htmlFallback && htmlFallback.definitions.length > 0) {
+        chineseDefinitions = htmlFallback.definitions;
+        resolvedTerm = htmlFallback.resolvedTerm || word;
+      } else if (data) {
+        chineseDefinitions = Dictionary.extractChineseDefinitions(data, {
+          allowTranslingual: true,
+        });
+      }
+    }
+
+    if (chineseDefinitions && chineseDefinitions.length > 0) {
+      const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
+      if (defsNode) {
+        fragment.appendChild(defsNode);
+      }
+      const note =
+        resolvedTerm !== word
+          ? `Showing traditional entry for ${resolvedTerm}.`
+          : null;
+      fragment.appendChild(Dictionary.buildWiktionaryLink(resolvedTerm, note));
+    } else if (!data) {
       fragment.appendChild(
         Dictionary.createMessageNode(
           "The public Wiktionary API does not have a definition entry for this exact term."
@@ -53,23 +91,6 @@ const Dictionary = {
         Dictionary.buildWiktionaryLink(
           word,
           "The entry may still exist on the main site; click to open the full page on Wiktionary."
-        )
-      );
-      Tooltip.show(word, fragment, range);
-      return;
-    }
-
-    const chineseDefinitions = Dictionary.extractChineseDefinitions(data);
-
-    if (chineseDefinitions && chineseDefinitions.length > 0) {
-      const defsNode = Dictionary.formatWiktionaryData(chineseDefinitions);
-      if (defsNode) {
-        fragment.appendChild(defsNode);
-      }
-      fragment.appendChild(
-        Dictionary.buildWiktionaryLink(
-          word,
-          "This definition was retrieved from the public Wiktionary API. Click to see the full entry."
         )
       );
     } else {
@@ -87,6 +108,120 @@ const Dictionary = {
     }
 
     Tooltip.show(word, fragment, range);
+  },
+
+  async fetchChineseFromHtml(word, visited = new Set()) {
+    if (visited.has(word)) return null;
+    visited.add(word);
+
+    const html = await Dictionary.fetchWiktionaryHtml(word);
+    if (!html) return null;
+
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const chineseHeading = doc.getElementById("Chinese");
+    const chineseSection = chineseHeading?.closest("section");
+    if (!chineseSection) return null;
+
+    const zhSeeTarget = Dictionary.extractZhSeeTarget(chineseSection);
+    if (zhSeeTarget && !visited.has(zhSeeTarget)) {
+      const targetData = await Dictionary.fetchWiktionaryData(zhSeeTarget);
+      const targetDefs = targetData
+        ? Dictionary.extractChineseDefinitions(targetData, {
+            allowTranslingual: false,
+          })
+        : null;
+      if (targetDefs && targetDefs.length > 0) {
+        return { definitions: targetDefs, resolvedTerm: zhSeeTarget };
+      }
+      return await Dictionary.fetchChineseFromHtml(zhSeeTarget, visited);
+    }
+
+    const definitions = Dictionary.parseChineseSectionFromHtml(chineseSection);
+    if (definitions.length > 0) {
+      return { definitions, resolvedTerm: word };
+    }
+    return null;
+  },
+
+  extractZhSeeTarget(chineseSection) {
+    const zhSeeTable = chineseSection.querySelector(".zh-see");
+    if (zhSeeTable) {
+      const hantLink = zhSeeTable.querySelector(".Hant a[href]");
+      const hantLabel = (hantLink?.textContent || "").trim();
+      if (hantLabel && /[\u4e00-\u9fff]/.test(hantLabel)) {
+        return hantLabel;
+      }
+    }
+
+    const text = chineseSection.textContent || "";
+    if (!/For pronunciation and definitions of/i.test(text)) {
+      return null;
+    }
+
+    const scope = zhSeeTable || chineseSection;
+    const links = scope.querySelectorAll("a[href]");
+    for (const link of links) {
+      if (link.closest(".Hans")) continue;
+      const href = link.getAttribute("href") || "";
+      const label = (link.textContent || "").trim();
+      if (
+        label &&
+        /[\u4e00-\u9fff]/.test(label) &&
+        !href.includes("Appendix:")
+      ) {
+        return label;
+      }
+    }
+    return null;
+  },
+
+  parseChineseSectionFromHtml(chineseSection) {
+    const skipHeadingRegex =
+      /^(Glyph origin|Etymology|Pronunciation|Compounds|Descendants|Derived terms|Related terms|Usage notes|References|See also|Further reading|External links|Trivia|Notes)/i;
+    const entries = [];
+
+    const sections = chineseSection.querySelectorAll("section");
+    sections.forEach((sec) => {
+      const heading = sec.querySelector(":scope > h3, :scope > h4, :scope > h5");
+      const ol = sec.querySelector(":scope > ol");
+      if (!heading || !ol) return;
+
+      const posText = (heading.textContent || "").trim();
+      if (!posText || skipHeadingRegex.test(posText)) return;
+
+      const definitions = [];
+      const items = ol.querySelectorAll(":scope > li");
+      items.forEach((li) => {
+        const clone = li.cloneNode(true);
+        const exampleNodes = clone.querySelectorAll("dl, ul");
+        const examples = [];
+        exampleNodes.forEach((node) => {
+          const text = (node.textContent || "").trim();
+          if (text) examples.push(node.innerHTML);
+          node.remove();
+        });
+
+        clone.querySelectorAll("ol").forEach((nested) => nested.remove());
+
+        const defHtml = clone.innerHTML.trim();
+        if (defHtml) {
+          definitions.push({
+            definition: defHtml,
+            examples,
+          });
+        }
+      });
+
+      if (definitions.length > 0) {
+        entries.push({
+          partOfSpeech: posText,
+          language: "Chinese",
+          definitions,
+        });
+      }
+    });
+
+    return entries;
   },
 
   showErrorTooltip(word, range) {
@@ -240,7 +375,7 @@ const Dictionary = {
     return list.children.length > 0 ? list : null;
   },
 
-  extractChineseDefinitions(data) {
+  extractChineseDefinitions(data, { allowTranslingual = true } = {}) {
     if (!data || typeof data !== "object") return null;
 
     const chineseRegex = /(Chinese|Mandarin|Cantonese)/i;
@@ -260,7 +395,7 @@ const Dictionary = {
     });
 
     // Se nada em chinês for encontrado, tenta entradas "Translingual" como fallback
-    if (result.length === 0) {
+    if (result.length === 0 && allowTranslingual) {
       Object.keys(data).forEach((key) => {
         const entries = data[key];
         if (!Array.isArray(entries)) return;

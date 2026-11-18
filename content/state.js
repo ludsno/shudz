@@ -10,6 +10,8 @@ const TOOLTIP_MAX_WIDTH = 300;
 const TOOLTIP_SAFE_MARGIN = 310;
 const WIKTIONARY_API_BASE =
   "https://en.wiktionary.org/api/rest_v1/page/definition/";
+const WIKTIONARY_HTML_BASE =
+  "https://en.wiktionary.org/api/rest_v1/page/html/";
 const WIKTIONARY_PAGE_BASE = "https://en.wiktionary.org/wiki/";
 
 const shudzState = {
