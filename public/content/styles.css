@@ -43,11 +43,12 @@ body.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   --wikt-palette-lightyellow: rgba(251, 188, 4, 0.14);
   --wikt-palette-darkgrey: #5f6368;
   --wikt-palette-grey-9: #5f6368;
+  --wikt-palette-forestgreen: #235923;
   position: absolute;
   z-index: 2147483647;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 10px;
+  border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
   padding: 14px 16px;
   width: 380px;
@@ -96,15 +97,15 @@ body.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   border: none;
   margin: 0;
   padding: 0;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
   color: #5f6368;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
   border-radius: 4px;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -112,8 +113,8 @@ body.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
 
 #shudz-tooltip .save-btn svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 #shudz-tooltip .save-btn[hidden] {
@@ -251,6 +252,7 @@ body.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   --wikt-palette-lightyellow: rgba(253, 214, 99, 0.16);
   --wikt-palette-darkgrey: #a3a8ae;
   --wikt-palette-grey-9: #a3a8ae;
+  --wikt-palette-forestgreen: #81c995;
   background: #292b2f;
   color: #e8eaed;
   border-color: rgba(255, 255, 255, 0.16);

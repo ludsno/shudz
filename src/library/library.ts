@@ -31,8 +31,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const exportTsvBtn = document.getElementById(
     "exportTsvBtn"
   ) as HTMLButtonElement;
-  const clearWordsBtn = document.getElementById(
-    "clearWordsBtn"
+  const normalActions = document.getElementById(
+    "normalActions"
+  ) as HTMLElement;
+  const selectionActions = document.getElementById(
+    "selectionActions"
+  ) as HTMLElement;
+  const enterSelectBtn = document.getElementById(
+    "enterSelectBtn"
+  ) as HTMLButtonElement;
+  const cancelSelectBtn = document.getElementById(
+    "cancelSelectBtn"
+  ) as HTMLButtonElement;
+  const selectAllCheckbox = document.getElementById(
+    "selectAllCheckbox"
+  ) as HTMLInputElement;
+  const selectAllLabel = document.getElementById(
+    "selectAllLabel"
+  ) as HTMLElement;
+  const deleteSelectedBtn = document.getElementById(
+    "deleteSelectedBtn"
   ) as HTMLButtonElement;
 
   const cacheEnabledToggle = document.getElementById(
@@ -57,6 +75,19 @@ document.addEventListener("DOMContentLoaded", () => {
   let savedWordsMap: Record<string, SavedWord> = {};
   let cacheConfig: CacheConfig = { ...DEFAULT_CACHE_CONFIG };
   let dictCacheMap: Record<string, CachedEntry> = {};
+  const selectedWords = new Set<string>();
+  let isSelectionMode = false;
+
+  function setSelectionMode(active: boolean): void {
+    isSelectionMode = active;
+    if (!active) {
+      selectedWords.clear();
+    }
+    normalActions.hidden = active;
+    selectionActions.hidden = !active;
+    wordList.classList.toggle("is-selecting", active);
+    renderSavedWords();
+  }
 
   function switchTab(target: "words" | "cache"): void {
     const isWords = target === "words";
@@ -213,6 +244,35 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function updateSelectionToolbar(filtered: SavedWord[]): void {
+    for (const word of Array.from(selectedWords)) {
+      if (!savedWordsMap[word]) {
+        selectedWords.delete(word);
+      }
+    }
+
+    const totalSelected = selectedWords.size;
+    deleteSelectedBtn.disabled = totalSelected === 0;
+    deleteSelectedBtn.textContent = `Delete (${totalSelected})`;
+
+    const hasFiltered = filtered.length > 0;
+    selectAllCheckbox.disabled = !hasFiltered;
+    selectAllLabel.classList.toggle("is-disabled", !hasFiltered);
+
+    if (!hasFiltered) {
+      selectAllCheckbox.checked = false;
+      selectAllCheckbox.indeterminate = false;
+      return;
+    }
+
+    const selectedFilteredCount = filtered.filter((item) =>
+      selectedWords.has(item.word)
+    ).length;
+    selectAllCheckbox.checked = selectedFilteredCount === filtered.length;
+    selectAllCheckbox.indeterminate =
+      selectedFilteredCount > 0 && selectedFilteredCount < filtered.length;
+  }
+
   function renderSavedWords(): void {
     const allCount = Object.keys(savedWordsMap).length;
     savedCountEl.textContent = String(allCount);
@@ -221,9 +281,18 @@ document.addEventListener("DOMContentLoaded", () => {
     exportJsonBtn.disabled = !hasWords;
     exportCsvBtn.disabled = !hasWords;
     exportTsvBtn.disabled = !hasWords;
-    clearWordsBtn.disabled = !hasWords;
+    enterSelectBtn.disabled = !hasWords;
+
+    if (!hasWords && isSelectionMode) {
+      isSelectionMode = false;
+      selectedWords.clear();
+      normalActions.hidden = false;
+      selectionActions.hidden = true;
+      wordList.classList.remove("is-selecting");
+    }
 
     const filtered = getFilteredWords();
+    updateSelectionToolbar(filtered);
     wordList.textContent = "";
 
     if (filtered.length === 0) {
@@ -242,12 +311,31 @@ document.addEventListener("DOMContentLoaded", () => {
     filtered.forEach((item) => {
       const card = document.createElement("div");
       card.className = "card word-card";
+      if (selectedWords.has(item.word)) {
+        card.classList.add("is-selected");
+      }
 
       const row = document.createElement("div");
       row.className = "word-row";
 
       const main = document.createElement("div");
       main.className = "word-main";
+
+      const selectBox = document.createElement("input");
+      selectBox.type = "checkbox";
+      selectBox.className = "word-select-checkbox";
+      selectBox.checked = selectedWords.has(item.word);
+      selectBox.setAttribute("aria-label", `Select ${item.word}`);
+      selectBox.addEventListener("change", () => {
+        if (selectBox.checked) {
+          selectedWords.add(item.word);
+        } else {
+          selectedWords.delete(item.word);
+        }
+        card.classList.toggle("is-selected", selectBox.checked);
+        updateSelectionToolbar(filtered);
+      });
+      main.appendChild(selectBox);
 
       const hanzi = document.createElement("span");
       hanzi.className = "word-hanzi";
@@ -281,8 +369,16 @@ document.addEventListener("DOMContentLoaded", () => {
       deleteBtn.className = "btn btn-danger";
       deleteBtn.textContent = "Delete";
       deleteBtn.addEventListener("click", () => {
+        if (
+          !window.confirm(
+            `Remove "${item.word}" from saved words? This cannot be undone.`
+          )
+        ) {
+          return;
+        }
         const updated = { ...savedWordsMap };
         delete updated[item.word];
+        selectedWords.delete(item.word);
         savedWordsMap = updated;
         chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: updated }, () => {
           renderSavedWords();
@@ -441,13 +537,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
   searchInput.addEventListener("input", renderSavedWords);
 
-  clearWordsBtn.addEventListener("click", () => {
-    if (!window.confirm("Remove all saved words? This cannot be undone.")) {
+  enterSelectBtn.addEventListener("click", () => {
+    setSelectionMode(true);
+  });
+
+  cancelSelectBtn.addEventListener("click", () => {
+    setSelectionMode(false);
+  });
+
+  selectAllCheckbox.addEventListener("change", () => {
+    const filtered = getFilteredWords();
+    if (selectAllCheckbox.checked) {
+      filtered.forEach((item) => selectedWords.add(item.word));
+    } else {
+      filtered.forEach((item) => selectedWords.delete(item.word));
+    }
+    renderSavedWords();
+  });
+
+  deleteSelectedBtn.addEventListener("click", () => {
+    const count = selectedWords.size;
+    if (count === 0) return;
+    if (
+      !window.confirm(
+        `Remove ${count} selected word(s)? This cannot be undone.`
+      )
+    ) {
       return;
     }
-    savedWordsMap = {};
-    chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: {} }, () => {
-      renderSavedWords();
+    const updated = { ...savedWordsMap };
+    selectedWords.forEach((word) => {
+      delete updated[word];
+    });
+    selectedWords.clear();
+    savedWordsMap = updated;
+    chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: updated }, () => {
+      setSelectionMode(false);
     });
   });
 

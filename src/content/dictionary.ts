@@ -511,15 +511,24 @@ export const Dictionary = {
       const items = ol.querySelectorAll(":scope > li");
       items.forEach((li) => {
         const clone = li.cloneNode(true) as Element;
-        const exampleNodes = clone.querySelectorAll("dl, ul");
         const examples: string[] = [];
-        exampleNodes.forEach((node) => {
-          const text = (node.textContent || "").trim();
-          if (text) examples.push(node.innerHTML);
-          node.remove();
-        });
 
-        clone.querySelectorAll("ol").forEach((nested) => nested.remove());
+        const itemNodes = clone.querySelectorAll(
+          ":scope > dl > dd, :scope > ul > li"
+        );
+        if (itemNodes.length > 0) {
+          itemNodes.forEach((itemNode) => {
+            const text = (itemNode.textContent || "").trim();
+            if (text) examples.push(itemNode.innerHTML);
+          });
+        } else {
+          clone.querySelectorAll(":scope > dl, :scope > ul").forEach((node) => {
+            const text = (node.textContent || "").trim();
+            if (text) examples.push(node.innerHTML);
+          });
+        }
+
+        clone.querySelectorAll("dl, ul, ol").forEach((nested) => nested.remove());
 
         const defHtml = clone.innerHTML.trim();
         if (defHtml) {

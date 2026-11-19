@@ -536,11 +536,19 @@ export const Overlay = {
     return (text.match(/[\u4e00-\u9fa5]/g) || []).length > LANGUAGE_MIN_CHARS;
   },
 
-  handleTextSelection(): void {
+  handleTextSelection(event: MouseEvent): void {
     if (!shudzState.masterEnabled || !shudzState.dictionaryEnabled) return;
+    if (
+      event.target instanceof Node &&
+      shudzState.currentTooltip?.contains(event.target)
+    ) {
+      return;
+    }
     setTimeout(() => {
       const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return;
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+        return;
+      }
       const rawText = selection.toString().trim();
       const text = Dictionary.normalizeChineseSelection(rawText);
       if (

@@ -150,6 +150,64 @@
         color: var(--danger);
       }
 
+      .toolbar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .toolbar-actions[hidden] {
+        display: none;
+      }
+
+      #deleteSelectedBtn {
+        min-width: 96px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .select-all-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text);
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background-color: var(--surface);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .select-all-label:hover {
+        background-color: var(--row-hover);
+      }
+
+      .select-all-label.is-disabled {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
+      .word-select-checkbox,
+      #selectAllCheckbox {
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      .word-list:not(.is-selecting) .word-select-checkbox {
+        display: none;
+      }
+
+      .word-card.is-selected {
+        border-color: var(--accent);
+      }
+
       .card {
         background-color: var(--surface);
         border: 1px solid var(--border);
@@ -385,12 +443,22 @@
             id="searchInput"
             placeholder="Search by word, pinyin, or definition..."
           />
-          <button type="button" class="btn" id="exportJsonBtn">Export JSON</button>
-          <button type="button" class="btn" id="exportCsvBtn">Export CSV</button>
-          <button type="button" class="btn" id="exportTsvBtn">Export Anki (TSV)</button>
-          <button type="button" class="btn btn-danger" id="clearWordsBtn">
-            Clear all
-          </button>
+          <div class="toolbar-actions" id="normalActions">
+            <button type="button" class="btn" id="exportJsonBtn">Export JSON</button>
+            <button type="button" class="btn" id="exportCsvBtn">Export CSV</button>
+            <button type="button" class="btn" id="exportTsvBtn">Export Anki (TSV)</button>
+            <button type="button" class="btn" id="enterSelectBtn">Select</button>
+          </div>
+          <div class="toolbar-actions" id="selectionActions" hidden>
+            <label class="select-all-label" id="selectAllLabel" for="selectAllCheckbox">
+              <input type="checkbox" id="selectAllCheckbox" />
+              <span>Select all</span>
+            </label>
+            <button type="button" class="btn btn-danger" id="deleteSelectedBtn" disabled>
+              Delete (0)
+            </button>
+            <button type="button" class="btn" id="cancelSelectBtn">Cancel</button>
+          </div>
         </div>
 
         <div class="word-list" id="wordList"></div>

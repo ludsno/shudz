@@ -7,12 +7,19 @@ const ALLOWED_WIKTIONARY_TAGS = new Set([
   "SMALL",
   "SUB",
   "SUP",
+  "BR",
 ]);
 
 export function htmlToPlainText(html?: string): string {
   if (!html) return "";
   const doc = new DOMParser().parseFromString(String(html), "text/html");
-  return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+  doc.body.querySelectorAll("br").forEach((br) => {
+    br.replaceWith("\n");
+  });
+  return (doc.body.textContent || "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim();
 }
 
 export function buildSafeHtmlFragment(
@@ -36,6 +43,9 @@ export function buildSafeHtmlFragment(
     const tag = elem.tagName;
     if (tag === "SCRIPT" || tag === "STYLE" || tag === "LINK") {
       return null;
+    }
+    if (tag === "BR") {
+      return document.createElement("br");
     }
 
     const frag = document.createDocumentFragment();

@@ -20,6 +20,7 @@
   --wikt-palette-lightyellow: rgba(251, 188, 4, 0.14);
   --wikt-palette-darkgrey: #5f6368;
   --wikt-palette-grey-9: #5f6368;
+  --wikt-palette-forestgreen: #235923;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,6 +45,7 @@
     --wikt-palette-lightyellow: rgba(253, 214, 99, 0.16);
     --wikt-palette-darkgrey: #a3a8ae;
     --wikt-palette-grey-9: #a3a8ae;
+    --wikt-palette-forestgreen: #81c995;
   }
 }
 
@@ -69,6 +71,7 @@
   --wikt-palette-lightyellow: rgba(253, 214, 99, 0.16);
   --wikt-palette-darkgrey: #a3a8ae;
   --wikt-palette-grey-9: #a3a8ae;
+  --wikt-palette-forestgreen: #81c995;
 }
 
 :root[data-theme="light"] {
