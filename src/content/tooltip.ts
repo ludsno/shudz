@@ -3,7 +3,8 @@ import {
   TOOLTIP_OFFSET_Y,
   TOOLTIP_SAFE_MARGIN,
   shudzState,
-} from "./state";
+} from "./state.ts";
+import { createTooltipTemplateNode } from "./tooltip-template.ts";
 
 export interface TooltipSaveOptions {
   isSaved: boolean;
@@ -11,26 +12,6 @@ export interface TooltipSaveOptions {
 }
 
 export const Tooltip = {
-  async ensureTemplateLoaded(): Promise<void> {
-    if (shudzState.tooltipTemplateElement) return;
-    try {
-      const url = chrome.runtime.getURL("content/tooltip-template.html");
-      const html = await (await fetch(url)).text();
-      const container = document.createElement("div");
-      container.innerHTML = html.trim();
-      const template = container.querySelector(
-        "#shudz-tooltip-template"
-      ) as HTMLTemplateElement | null;
-      if (template && template.content) {
-        shudzState.tooltipTemplateElement = template;
-      } else {
-        console.error("Shudz tooltip template not found or invalid.");
-      }
-    } catch (e) {
-      console.error("Failed to load tooltip template", e);
-    }
-  },
-
   show(
     title: string,
     contentNode: Node,
@@ -56,28 +37,7 @@ export const Tooltip = {
     contentNode: Node,
     saveOptions: TooltipSaveOptions | null = null
   ): HTMLElement {
-    let tooltip: HTMLElement;
-    const templateChild =
-      shudzState.tooltipTemplateElement?.content.firstElementChild;
-    if (templateChild) {
-      tooltip = templateChild.cloneNode(true) as HTMLElement;
-    } else {
-      tooltip = document.createElement("div");
-      tooltip.id = "shudz-tooltip";
-      tooltip.setAttribute("role", "dialog");
-      tooltip.setAttribute("aria-label", "Dictionary definition");
-      tooltip.innerHTML = `
-        <div class="shudz-header">
-          <span class="word-text"></span>
-          <div class="shudz-header-actions">
-            <button type="button" class="open-saved-btn" aria-label="Open saved entry" title="Open saved entry" hidden>Saved ↗</button>
-            <button type="button" class="save-btn" aria-label="Save word" aria-pressed="false" title="Save word" hidden><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>
-            <button type="button" class="close-btn" aria-label="Close">✕</button>
-          </div>
-        </div>
-        <div class="shudz-content"></div>
-      `;
-    }
+    const tooltip = createTooltipTemplateNode();
 
     if (Tooltip.isPageDark()) {
       tooltip.classList.add("shudz-dark");

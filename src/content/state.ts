@@ -24,7 +24,6 @@ export interface ShudzState {
   isProcessing: boolean;
   chineseWordSegmenter: Intl.Segmenter | null;
   currentTooltip: HTMLElement | null;
-  tooltipTemplateElement: HTMLTemplateElement | null;
   dictionaryCache: Map<string, CachedEntry>;
   cacheConfig: CacheConfig;
   useSmartSegmentation: boolean;
@@ -43,7 +42,6 @@ export const shudzState: ShudzState = {
   isProcessing: false,
   chineseWordSegmenter: null,
   currentTooltip: null,
-  tooltipTemplateElement: null,
   dictionaryCache: new Map<string, CachedEntry>(),
   cacheConfig: { ...DEFAULT_CACHE_CONFIG },
   useSmartSegmentation: true,

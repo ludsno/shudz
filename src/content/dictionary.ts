@@ -17,8 +17,6 @@ export const Dictionary = {
 
   async fetchDefinition(word: string, range: Range): Promise<void> {
     const requestId = ++shudzState.activeLookupId;
-    await Tooltip.ensureTemplateLoaded();
-    if (requestId !== shudzState.activeLookupId) return;
 
     // Show loading tooltip while fetching
     const loadingNode = TooltipRenderer.createMessageNode(
