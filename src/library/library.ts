@@ -1,4 +1,5 @@
 import { buildSafeHtmlFragment, htmlToPlainText } from "../shared/html";
+import { SavedWordsService } from "../services/saved-words.service";
 import {
   DEFAULT_CACHE_CONFIG,
   SHUDZ_KEYS,
@@ -374,7 +375,7 @@ document.addEventListener("DOMContentLoaded", () => {
       deleteBtn.type = "button";
       deleteBtn.className = "btn btn-danger";
       deleteBtn.textContent = "Delete";
-      deleteBtn.addEventListener("click", () => {
+      deleteBtn.addEventListener("click", async () => {
         if (
           !window.confirm(
             `Remove "${item.word}" from saved words? This cannot be undone.`
@@ -382,13 +383,10 @@ document.addEventListener("DOMContentLoaded", () => {
         ) {
           return;
         }
-        const updated = { ...savedWordsMap };
-        delete updated[item.word];
+        await SavedWordsService.deleteWord(item.word);
+        delete savedWordsMap[item.word];
         selectedWords.delete(item.word);
-        savedWordsMap = updated;
-        chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: updated }, () => {
-          renderSavedWords();
-        });
+        renderSavedWords();
       });
 
       actions.appendChild(expandBtn);
@@ -566,7 +564,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderSavedWords();
   });
 
-  deleteSelectedBtn.addEventListener("click", () => {
+  deleteSelectedBtn.addEventListener("click", async () => {
     const count = selectedWords.size;
     if (count === 0) return;
     if (
@@ -576,15 +574,12 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
       return;
     }
-    const updated = { ...savedWordsMap };
+    await SavedWordsService.deleteWords(selectedWords);
     selectedWords.forEach((word) => {
-      delete updated[word];
+      delete savedWordsMap[word];
     });
     selectedWords.clear();
-    savedWordsMap = updated;
-    chrome.storage.local.set({ [SHUDZ_KEYS.SAVED_WORDS]: updated }, () => {
-      setSelectionMode(false);
-    });
+    setSelectionMode(false);
   });
 
   function downloadFile(filename: string, content: string, mimeType: string): void {
@@ -599,65 +594,29 @@ document.addEventListener("DOMContentLoaded", () => {
     URL.revokeObjectURL(url);
   }
 
-  function formatFlatDefinitions(item: SavedWord): string {
-    const defs = Array.isArray(item.definitions) ? item.definitions : [];
-    return defs
-      .map((d) => {
-        const prefix = d.partOfSpeech ? `[${d.partOfSpeech}] ` : "";
-        const body = d.text || htmlToPlainText(d.html);
-        return `${prefix}${body}`.trim();
-      })
-      .filter(Boolean)
-      .join("; ");
-  }
-
   exportJsonBtn.addEventListener("click", () => {
     const items = getFilteredWords();
     downloadFile(
       "shudz-saved-words.json",
-      JSON.stringify(items, null, 2),
+      SavedWordsService.exportAsJson(items),
       "application/json;charset=utf-8"
     );
   });
 
   exportCsvBtn.addEventListener("click", () => {
     const items = getFilteredWords();
-    const escapeCsv = (val: string) =>
-      `"${String(val ?? "").replace(/"/g, '""')}"`;
-    const rows = [
-      ["word", "traditional", "pinyin", "definitions"].join(","),
-      ...items.map((item) =>
-        [
-          escapeCsv(item.word),
-          escapeCsv(item.resolvedTerm || ""),
-          escapeCsv(item.pinyin || ""),
-          escapeCsv(formatFlatDefinitions(item)),
-        ].join(",")
-      ),
-    ];
     downloadFile(
       "shudz-saved-words.csv",
-      "\uFEFF" + rows.join("\r\n"),
+      SavedWordsService.exportAsCsv(items),
       "text/csv;charset=utf-8"
     );
   });
 
   exportTsvBtn.addEventListener("click", () => {
     const items = getFilteredWords();
-    const cleanCell = (val: string) =>
-      String(val ?? "")
-        .replace(/[\t\r\n]+/g, " ")
-        .trim();
-    const rows = items.map((item) =>
-      [
-        cleanCell(item.word),
-        cleanCell(item.pinyin || ""),
-        cleanCell(formatFlatDefinitions(item)),
-      ].join("\t")
-    );
     downloadFile(
       "shudz-anki.tsv",
-      rows.join("\n"),
+      SavedWordsService.exportAsAnkiTsv(items),
       "text/tab-separated-values;charset=utf-8"
     );
   });

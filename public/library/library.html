@@ -88,21 +88,24 @@
 
       .toolbar {
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 12px;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+        min-height: 36px;
       }
 
       .search-input {
-        flex: 1 1 220px;
-        padding: 8px 10px;
+        flex: 1 1 260px;
+        max-width: 360px;
+        padding: 8px 12px;
         border-radius: 6px;
         border: 1px solid var(--border);
         background-color: var(--surface);
         color: var(--text);
         font-family: inherit;
         font-size: 13px;
+        transition: border-color 0.15s ease;
       }
 
       .search-input:focus {
