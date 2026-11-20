@@ -37,7 +37,7 @@ export const Tooltip = {
     range: Range,
     saveOptions: TooltipSaveOptions | null = null
   ): void {
-    Tooltip.remove();
+    Tooltip.remove(false);
     const tooltip = Tooltip.createTooltipElement(
       title,
       contentNode,
@@ -48,9 +48,7 @@ export const Tooltip = {
     shudzState.currentTooltip = tooltip;
     Tooltip.positionTooltip(tooltip, range);
     document.addEventListener("keydown", Tooltip.closeOnEscape);
-    setTimeout(() => {
-      document.addEventListener("click", Tooltip.closeOnClickOutside);
-    }, 100);
+    document.addEventListener("mousedown", Tooltip.closeOnClickOutside);
   },
 
   createTooltipElement(
@@ -72,6 +70,7 @@ export const Tooltip = {
         <div class="shudz-header">
           <span class="word-text"></span>
           <div class="shudz-header-actions">
+            <button type="button" class="open-saved-btn" aria-label="Open saved entry" title="Open saved entry" hidden>Saved ↗</button>
             <button type="button" class="save-btn" aria-label="Save word" aria-pressed="false" title="Save word" hidden><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>
             <button type="button" class="close-btn" aria-label="Close">✕</button>
           </div>
@@ -90,14 +89,35 @@ export const Tooltip = {
     }
 
     const saveBtn = tooltip.querySelector(".save-btn") as HTMLButtonElement | null;
+    const openSavedBtn = tooltip.querySelector(
+      ".open-saved-btn"
+    ) as HTMLButtonElement | null;
+
+    if (openSavedBtn) {
+      openSavedBtn.addEventListener("click", () => {
+        const url = chrome.runtime.getURL(
+          `library/library.html?word=${encodeURIComponent(title)}`
+        );
+        window.open(url, "_blank", "noopener");
+      });
+    }
+
     if (saveBtn && saveOptions && typeof saveOptions.onToggleSave === "function") {
       saveBtn.hidden = false;
-      Tooltip.updateSaveButtonState(saveBtn, Boolean(saveOptions.isSaved));
+      Tooltip.updateSaveButtonState(
+        saveBtn,
+        Boolean(saveOptions.isSaved),
+        openSavedBtn
+      );
       saveBtn.addEventListener("click", async () => {
         saveBtn.disabled = true;
         try {
           const nowSaved = await saveOptions.onToggleSave();
-          Tooltip.updateSaveButtonState(saveBtn, Boolean(nowSaved));
+          Tooltip.updateSaveButtonState(
+            saveBtn,
+            Boolean(nowSaved),
+            openSavedBtn
+          );
         } finally {
           saveBtn.disabled = false;
         }
@@ -115,9 +135,16 @@ export const Tooltip = {
     return tooltip;
   },
 
-  updateSaveButtonState(btn: HTMLButtonElement, isSaved: boolean): void {
+  updateSaveButtonState(
+    btn: HTMLButtonElement,
+    isSaved: boolean,
+    openSavedBtn?: HTMLButtonElement | null
+  ): void {
     btn.classList.toggle("is-saved", isSaved);
     btn.setAttribute("aria-pressed", String(isSaved));
+    if (openSavedBtn) {
+      openSavedBtn.hidden = !isSaved;
+    }
     const svg = btn.querySelector("svg");
     if (svg) {
       svg.setAttribute("fill", isSaved ? "currentColor" : "none");
@@ -130,8 +157,10 @@ export const Tooltip = {
   attachTooltipCloseBehavior(tooltip: HTMLElement): void {
     const closeBtn = tooltip.querySelector(".close-btn");
     if (closeBtn) {
-      closeBtn.addEventListener("click", () => {
-        Tooltip.remove();
+      closeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        Tooltip.remove(true);
       });
     }
   },
@@ -184,18 +213,26 @@ export const Tooltip = {
     }
   },
 
-  remove(): void {
+  remove(clearSelectionAndCancel = true): void {
+    if (clearSelectionAndCancel) {
+      shudzState.activeLookupId++;
+      try {
+        window.getSelection()?.removeAllRanges();
+      } catch {
+        // Ignore if selection is not available
+      }
+    }
     if (shudzState.currentTooltip) {
       shudzState.currentTooltip.remove();
       shudzState.currentTooltip = null;
-      document.removeEventListener("click", Tooltip.closeOnClickOutside);
-      document.removeEventListener("keydown", Tooltip.closeOnEscape);
     }
+    document.removeEventListener("mousedown", Tooltip.closeOnClickOutside);
+    document.removeEventListener("keydown", Tooltip.closeOnEscape);
   },
 
   closeOnEscape(e: KeyboardEvent): void {
     if (e.key === "Escape") {
-      Tooltip.remove();
+      Tooltip.remove(true);
     }
   },
 
@@ -205,7 +242,7 @@ export const Tooltip = {
       e.target instanceof Node &&
       !shudzState.currentTooltip.contains(e.target)
     ) {
-      Tooltip.remove();
+      Tooltip.remove(true);
     }
   },
 };

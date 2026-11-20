@@ -15,6 +15,8 @@ import {
 } from "./state";
 import { Tooltip } from "./tooltip";
 
+let lastMouseDownPos = { x: 0, y: 0 };
+
 export const Overlay = {
   init(): void {
     chrome.storage.local.get(
@@ -206,6 +208,9 @@ export const Overlay = {
       }
     });
 
+    document.addEventListener("mousedown", (e: MouseEvent) => {
+      lastMouseDownPos = { x: e.clientX, y: e.clientY };
+    });
     document.addEventListener("mouseup", Overlay.handleTextSelection);
   },
 
@@ -544,6 +549,17 @@ export const Overlay = {
     ) {
       return;
     }
+
+    const isDrag =
+      Math.hypot(
+        event.clientX - lastMouseDownPos.x,
+        event.clientY - lastMouseDownPos.y
+      ) >= 4;
+    const isMultiClick = event.detail >= 2;
+    if (!isDrag && !isMultiClick) {
+      return;
+    }
+
     setTimeout(() => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || selection.rangeCount === 0) {

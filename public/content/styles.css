@@ -117,6 +117,32 @@ body.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
   height: 16px;
 }
 
+#shudz-tooltip .open-saved-btn {
+  appearance: none;
+  background: rgba(11, 87, 208, 0.08);
+  border: none;
+  margin: 0 2px 0 0;
+  padding: 0 7px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: #0b57d0;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+#shudz-tooltip .open-saved-btn:hover {
+  background: rgba(11, 87, 208, 0.14);
+}
+
+#shudz-tooltip .open-saved-btn[hidden],
 #shudz-tooltip .save-btn[hidden] {
   display: none;
 }
@@ -270,6 +296,15 @@ body.shudz-char-mode ruby.shudz-word + ruby.shudz-word {
 #shudz-tooltip.shudz-dark .save-btn,
 #shudz-tooltip.shudz-dark .close-btn {
   color: #9aa0a6;
+}
+
+#shudz-tooltip.shudz-dark .open-saved-btn {
+  color: #8ab4f8;
+  background: rgba(138, 180, 248, 0.14);
+}
+
+#shudz-tooltip.shudz-dark .open-saved-btn:hover {
+  background: rgba(138, 180, 248, 0.22);
 }
 
 #shudz-tooltip.shudz-dark .save-btn.is-saved {

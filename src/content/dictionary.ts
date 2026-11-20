@@ -34,10 +34,12 @@ interface HtmlFallbackResult {
   resolvedTerm: string;
 }
 
-let latestLookupId = 0;
-
 export const Dictionary = {
   normalizeChineseSelection,
+
+  cancelPendingLookup(): void {
+    shudzState.activeLookupId++;
+  },
 
   createMessageNode(text: string): HTMLDivElement {
     const div = document.createElement("div");
@@ -47,12 +49,12 @@ export const Dictionary = {
   },
 
   async fetchDefinition(word: string, range: Range): Promise<void> {
-    const requestId = ++latestLookupId;
+    const requestId = ++shudzState.activeLookupId;
     await Tooltip.ensureTemplateLoaded();
-    if (requestId !== latestLookupId) return;
+    if (requestId !== shudzState.activeLookupId) return;
 
     const cached = await Dictionary.getCachedEntry(word);
-    if (requestId !== latestLookupId) return;
+    if (requestId !== shudzState.activeLookupId) return;
 
     if (cached) {
       await Dictionary.renderDefinitions(
@@ -70,10 +72,10 @@ export const Dictionary = {
 
     try {
       const data = await Dictionary.fetchWiktionaryData(word);
-      if (requestId !== latestLookupId) return;
+      if (requestId !== shudzState.activeLookupId) return;
       await Dictionary.handleWiktionaryResponse(word, data, range, requestId);
     } catch (error) {
-      if (requestId !== latestLookupId) return;
+      if (requestId !== shudzState.activeLookupId) return;
       Dictionary.showErrorTooltip(word, range);
       console.error(error);
     }
@@ -328,7 +330,7 @@ export const Dictionary = {
     fragment.appendChild(Dictionary.buildWiktionaryLink(resolvedTerm, note));
 
     const isSaved = await Dictionary.isWordSaved(word);
-    if (requestId !== undefined && requestId !== latestLookupId) return;
+    if (requestId !== undefined && requestId !== shudzState.activeLookupId) return;
 
     Tooltip.show(word, fragment, range, {
       isSaved,
@@ -374,7 +376,7 @@ export const Dictionary = {
 
     if (!chineseDefinitions || chineseDefinitions.length === 0) {
       const htmlFallback = await Dictionary.fetchChineseFromHtml(word);
-      if (requestId !== undefined && requestId !== latestLookupId) return;
+      if (requestId !== undefined && requestId !== shudzState.activeLookupId) return;
       if (htmlFallback && htmlFallback.definitions.length > 0) {
         chineseDefinitions = htmlFallback.definitions;
         resolvedTerm = htmlFallback.resolvedTerm || word;
@@ -387,7 +389,7 @@ export const Dictionary = {
 
     if (chineseDefinitions && chineseDefinitions.length > 0) {
       await Dictionary.setCachedEntry(word, chineseDefinitions, resolvedTerm);
-      if (requestId !== undefined && requestId !== latestLookupId) return;
+      if (requestId !== undefined && requestId !== shudzState.activeLookupId) return;
       await Dictionary.renderDefinitions(
         word,
         chineseDefinitions,
@@ -422,6 +424,7 @@ export const Dictionary = {
       );
     }
 
+    if (requestId !== undefined && requestId !== shudzState.activeLookupId) return;
     Tooltip.show(word, fragment, range);
   },
 

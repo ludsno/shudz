@@ -77,6 +77,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let dictCacheMap: Record<string, CachedEntry> = {};
   const selectedWords = new Set<string>();
   let isSelectionMode = false;
+  const targetWordParam = new URLSearchParams(window.location.search).get(
+    "word"
+  );
+  if (targetWordParam) {
+    searchInput.value = targetWordParam;
+  }
 
   function setSelectionMode(active: boolean): void {
     isSelectionMode = active;
@@ -445,6 +451,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       details.appendChild(metaFooter);
       card.appendChild(details);
+
+      if (targetWordParam && item.word === targetWordParam) {
+        details.hidden = false;
+        expandBtn.textContent = "Hide";
+      }
 
       expandBtn.addEventListener("click", () => {
         const isHidden = details.hidden;

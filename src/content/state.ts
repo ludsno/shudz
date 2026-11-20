@@ -32,6 +32,7 @@ export interface ShudzState {
   dictionaryEnabled: boolean;
   masterEnabled: boolean;
   theme: ThemeMode;
+  activeLookupId: number;
 }
 
 export const shudzState: ShudzState = {
@@ -50,4 +51,5 @@ export const shudzState: ShudzState = {
   dictionaryEnabled: true,
   masterEnabled: true,
   theme: "auto",
+  activeLookupId: 0,
 };
