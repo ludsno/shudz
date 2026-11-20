@@ -17,12 +17,7 @@ export const WIKTIONARY_HTML_BASE =
 export const WIKTIONARY_PAGE_BASE = "https://en.wiktionary.org/wiki/";
 
 export interface ShudzState {
-  pinyinHasBeenAdded: boolean;
   domainKey: string;
-  observer: MutationObserver | null;
-  processingQueue: Text[];
-  isProcessing: boolean;
-  chineseWordSegmenter: Intl.Segmenter | null;
   currentTooltip: HTMLElement | null;
   dictionaryCache: Map<string, CachedEntry>;
   cacheConfig: CacheConfig;
@@ -35,12 +30,7 @@ export interface ShudzState {
 }
 
 export const shudzState: ShudzState = {
-  pinyinHasBeenAdded: false,
   domainKey: "pinyin_state_" + window.location.hostname,
-  observer: null,
-  processingQueue: [],
-  isProcessing: false,
-  chineseWordSegmenter: null,
   currentTooltip: null,
   dictionaryCache: new Map<string, CachedEntry>(),
   cacheConfig: { ...DEFAULT_CACHE_CONFIG },

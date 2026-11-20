@@ -332,16 +332,8 @@ document.addEventListener("DOMContentLoaded", () => {
       selectBox.type = "checkbox";
       selectBox.className = "word-select-checkbox";
       selectBox.checked = selectedWords.has(item.word);
+      selectBox.dataset.word = item.word;
       selectBox.setAttribute("aria-label", `Select ${item.word}`);
-      selectBox.addEventListener("change", () => {
-        if (selectBox.checked) {
-          selectedWords.add(item.word);
-        } else {
-          selectedWords.delete(item.word);
-        }
-        card.classList.toggle("is-selected", selectBox.checked);
-        updateSelectionToolbar(filtered);
-      });
       main.appendChild(selectBox);
 
       const hanzi = document.createElement("span");
@@ -369,25 +361,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const expandBtn = document.createElement("button");
       expandBtn.type = "button";
       expandBtn.className = "btn";
+      expandBtn.dataset.action = "expand";
       expandBtn.textContent = "Details";
 
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
       deleteBtn.className = "btn btn-danger";
+      deleteBtn.dataset.action = "delete";
+      deleteBtn.dataset.word = item.word;
       deleteBtn.textContent = "Delete";
-      deleteBtn.addEventListener("click", async () => {
-        if (
-          !window.confirm(
-            `Remove "${item.word}" from saved words? This cannot be undone.`
-          )
-        ) {
-          return;
-        }
-        await SavedWordsService.deleteWord(item.word);
-        delete savedWordsMap[item.word];
-        selectedWords.delete(item.word);
-        renderSavedWords();
-      });
 
       actions.appendChild(expandBtn);
       actions.appendChild(deleteBtn);
@@ -455,15 +437,57 @@ document.addEventListener("DOMContentLoaded", () => {
         expandBtn.textContent = "Hide";
       }
 
-      expandBtn.addEventListener("click", () => {
-        const isHidden = details.hidden;
-        details.hidden = !isHidden;
-        expandBtn.textContent = isHidden ? "Hide" : "Details";
-      });
-
       wordList.appendChild(card);
     });
   }
+
+  wordList.addEventListener("click", async (e) => {
+    const target = e.target as HTMLElement;
+    const deleteBtn = target.closest<HTMLButtonElement>("[data-action='delete']");
+    if (deleteBtn) {
+      const word = deleteBtn.dataset.word;
+      if (!word) return;
+      if (
+        !window.confirm(
+          `Remove "${word}" from saved words? This cannot be undone.`
+        )
+      ) {
+        return;
+      }
+      await SavedWordsService.deleteWord(word);
+      delete savedWordsMap[word];
+      selectedWords.delete(word);
+      renderSavedWords();
+      return;
+    }
+
+    const expandBtn = target.closest<HTMLButtonElement>("[data-action='expand']");
+    if (expandBtn) {
+      const card = expandBtn.closest(".word-card");
+      const details = card?.querySelector<HTMLElement>(".word-details");
+      if (details) {
+        const isHidden = details.hidden;
+        details.hidden = !isHidden;
+        expandBtn.textContent = isHidden ? "Hide" : "Details";
+      }
+    }
+  });
+
+  wordList.addEventListener("change", (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.matches(".word-select-checkbox")) {
+      const word = target.dataset.word;
+      if (!word) return;
+      if (target.checked) {
+        selectedWords.add(word);
+      } else {
+        selectedWords.delete(word);
+      }
+      const card = target.closest(".word-card");
+      card?.classList.toggle("is-selected", target.checked);
+      updateSelectionToolbar(getFilteredWords());
+    }
+  });
 
   function renderCacheSettings(): void {
     cacheEnabledToggle.checked = cacheConfig.enabled !== false;
